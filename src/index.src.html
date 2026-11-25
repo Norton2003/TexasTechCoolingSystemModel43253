@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cooling Loop Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: a race team's cooling-system design tool, precise and checkable, same family as Radiator Flow Lab
+   IDEA a CFD/CAE post-processing bench: dark viewport, thermal colour maps, a schematic and instruments around it
+   PICTURE the full 3D loop (swirl pot, pump, Y fittings, motor, inverter, radiator, fan) with coolant coloured by temperature
+   COLOUR graphite ground, aluminium greys, thermal ramp blue to red, one scarlet accent for limits and the operating point
+   TYPE Archivo for titles and big figures, Inter for text and numbers
+   LAYOUT laptop: viewport left, verdict + controls right, then schematic, hydraulics, transient, checks, parts, method; phone: stacked */
+:root{color-scheme:dark;--bg:#0b0e13;--panel:#12171f;--panel2:#171e28;--line:#243040;--ink:#e9eef4;--mute:#93a1b3;--dim:#64748a;--acc:#ef2b36;--ok:#3ccf91;--warn:#f3b13c;--cold:#3fa7d6}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:16px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:clip;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Archivo,Inter,sans-serif;letter-spacing:-.02em;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:clamp(26px,3.1vw,42px);font-weight:800}
+h2{font-size:clamp(22px,2.4vw,32px);font-weight:800}
+h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
+p{margin:0}a{color:#8fc8ff}
+.band{padding:clamp(22px,3vw,44px) max(4vw,16px)}
+.wrap{max-width:1360px;margin:0 auto}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px max(4vw,16px);border-bottom:1px solid var(--line);background:#0d1118;position:sticky;top:0;z-index:30}
+.brand{display:flex;gap:10px;align-items:center;font:700 16px Archivo,sans-serif}
+.brand i{width:26px;height:26px;border-radius:50%;background:conic-gradient(#2994db,#8ce0d1,#fae073,#f58c33,#db2133,#2994db);box-shadow:inset 0 0 0 7px #0d1118,0 0 0 1px #3a4656;display:block}
+.chip{font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:5px 11px;white-space:nowrap}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{font-size:14px;color:var(--mute);text-decoration:none;padding:6px 10px;border-radius:8px}
+.nav a:hover{color:var(--ink);background:var(--panel2)}
+.seg{display:inline-flex;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:600 14px Inter,sans-serif;color:var(--mute);background:none;border:0;border-radius:7px;padding:0 12px;min-height:36px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px #33425a}
+.seg button:hover{color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8fc8ff;outline-offset:2px}
+.headline{display:grid;gap:10px;margin-bottom:18px}
+.headline p{color:var(--mute);max-width:78ch}.headline b{color:var(--ink);font-weight:600}
+.hero{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:20px}
+.view{position:relative;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 20%,#18212d,#0b0e13 70%);border:1px solid var(--line);min-height:560px}
+.view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.view::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(5,7,10,.55))}
+.vbar{position:absolute;left:12px;right:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;pointer-events:none;z-index:3}
+.vbar>*{pointer-events:auto}
+.exp{display:flex;align-items:center;gap:8px;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:42px;font-size:14px;color:var(--mute)}
+.exp input{width:120px}
+.legend{position:absolute;left:14px;bottom:14px;right:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;pointer-events:none;flex-wrap:wrap;z-index:3}
+.cbar{display:grid;gap:4px;font-size:13px;color:var(--mute);width:min(300px,60%)}
+.cbar .g{height:9px;border-radius:5px;background:linear-gradient(90deg,#1c3a9e,#2994db,#8ce0d1,#fae073,#f58c33,#db2133)}
+.cbar .ends{display:flex;justify-content:space-between;white-space:nowrap}
+.hint{font-size:13px;color:var(--dim);text-align:right}
+#labels{position:absolute;inset:0;z-index:2;pointer-events:none}
+.lbl{position:absolute;left:0;top:0;width:0;height:0;transition:opacity .25s}
+.lbl::before{content:"";position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#e9eef4;box-shadow:0 0 0 3px rgba(233,238,244,.22)}
+.lbl::after{content:"";position:absolute;left:0;top:-34px;width:1px;height:30px;background:linear-gradient(rgba(233,238,244,.7),rgba(233,238,244,.15))}
+.lbl span{position:absolute;bottom:34px;left:0;transform:translateX(-50%);font-size:13px;line-height:1.25;white-space:nowrap;background:rgba(11,14,19,.85);border:1px solid #33425a;border-radius:8px;padding:5px 9px;backdrop-filter:blur(6px)}
+.lbl b{font-weight:600}
+.info{position:absolute;right:14px;top:66px;width:min(320px,calc(100% - 28px));z-index:4;background:rgba(13,17,24,.94);border:1px solid #3a4a62;border-radius:14px;padding:14px 16px;backdrop-filter:blur(8px);box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.info h3{margin-bottom:6px}.info dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:8px 0 0;font-size:14px}
+.info dt{color:var(--mute)}.info dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.info .x{position:absolute;right:8px;top:8px;background:none;border:0;color:var(--mute);font-size:20px;width:36px;height:36px;cursor:pointer;border-radius:8px}
+.side{display:grid;gap:14px;align-content:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.big .k{font-size:14px;color:var(--mute)}
+.big .v{font:800 clamp(44px,5vw,64px)/1 Archivo,sans-serif;letter-spacing:-.03em;white-space:nowrap}
+.big .v small{font-size:.42em;color:var(--mute);margin-left:4px}
+.status{font-size:14px;color:var(--mute);margin-top:6px}
+.good{color:var(--ok)}.bad{color:#ff6a6f}.warn{color:var(--warn)}
+.figs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.figs div{background:var(--panel);padding:10px 12px}
+.figs span{display:block;font-size:13px;color:var(--mute)}
+.figs strong{font:700 20px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tabs{margin:-4px 0 14px}
+.ctl{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:4px 10px;align-items:center}
+.row label{font-size:14px;font-weight:500}
+.row .sub{grid-column:1/-1;font-size:13px;color:var(--dim);margin-top:-2px}
+.num{display:flex;align-items:center;background:#0b0f15;border:1px solid #2e3b4e;border-radius:9px;padding:0 8px;height:40px}
+.num input{flex:1;width:0;background:none;border:0;color:var(--ink);font:500 16px Inter,sans-serif;font-variant-numeric:tabular-nums;text-align:right;padding:0;outline:none}
+.num em{font-style:normal;font-size:13px;color:var(--mute);margin-left:5px;white-space:nowrap}
+input[type=range]{grid-column:1/-1;-webkit-appearance:none;appearance:none;width:100%;height:28px;background:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e;margin-top:-8px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e}
+select{background:#0b0f15;color:var(--ink);border:1px solid #2e3b4e;border-radius:9px;height:40px;font:500 16px Inter,sans-serif;padding:0 8px;width:100%}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:40px;font-size:14px;font-weight:500}
+.sw{position:relative;width:50px;height:28px;border-radius:99px;background:#2a3545;border:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#f4f6f9;transition:transform .2s}
+.sw[aria-pressed=true]{background:var(--acc)}.sw[aria-pressed=true]::after{transform:translateX(22px)}
+.btn{font:600 14px Inter,sans-serif;color:var(--ink);background:var(--panel2);border:1px solid #33425a;border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer}
+.btn:hover{border-color:#5a6d88}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.sec{border-top:1px solid var(--line)}
+.sechead{display:flex;justify-content:space-between;gap:16px;align-items:end;flex-wrap:wrap;margin-bottom:16px}
+.sechead p{color:var(--mute);max-width:72ch}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid2>.card{display:flex;flex-direction:column}
+.fig{position:relative;min-height:300px;flex:1}
+.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.note{font-size:14px;color:var(--mute);margin:4px 0 10px}
+svg text{font:13px Inter,sans-serif;fill:var(--mute);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th{font-weight:600;color:var(--mute);font-size:13px}
+.flags{display:grid;gap:8px}
+.flag{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-size:14px;padding:10px 14px;border-radius:10px;background:#1c1012;border:1px solid #5b2329}
+.flag b{font-weight:600}.flag .m{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.flag.ok{background:#0f1a15;border-color:#21483a}
+.flag.cfm{background:#1a1610;border-color:#4d3a22}
+.flag small{grid-column:1/-1;color:var(--mute);font-size:13px}
+.schem{position:relative;min-height:640px;height:100%}
+.schem>svg{position:absolute;inset:0;width:100%;height:100%}
+.method{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.method p,.method li{color:#c3cdd9;font-size:15px}.method ul{margin:6px 0 0;padding-left:18px}
+.eq{font:15px/1.5 "Cambria Math","STIX Two Math",Georgia,serif;color:var(--ink);background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+.est{display:inline-block;font-size:12px;font-weight:600;color:var(--warn);border:1px solid #5a4520;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.drop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:14px;color:var(--mute)}
+.drop input[type=file]{font-size:14px;color:var(--mute)}
+footer{color:var(--dim);font-size:13px;border-top:1px solid var(--line)}
+.sticky{display:none}
+@media (min-width:1101px){.hero{grid-template-rows:clamp(620px,80vh,800px)}.side{display:flex;flex-direction:column;min-height:0}.side .card:last-child{flex:1;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:#33425a transparent}}
+@media (max-width:1100px){.hero{grid-template-columns:minmax(0,1fr)}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.side,.method{grid-template-columns:minmax(0,1fr)}.view{min-height:480px}.nav{display:none}.hint{display:none}
+ .sticky{display:flex;position:sticky;top:0;z-index:31;gap:12px;justify-content:space-between;align-items:center;background:rgba(11,14,19,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px 16px;font-size:14px}
+ .sticky strong{font:800 19px Archivo,sans-serif;white-space:nowrap}.top{position:static}
+ .lbl[data-k=lrout],.lbl[data-k=lfan],.lbl[data-k=lmin],.lbl[data-k=linv]{display:none}.schem{min-height:720px}
+ .view{min-height:560px}.vbar{top:8px;left:8px;right:8px;gap:6px}.vbar .seg button{min-height:32px;padding:0 9px;font-size:13px}.exp{min-height:36px;padding:0 8px;font-size:13px}.exp input{width:76px}.exp select{font-size:13px!important}.info{top:auto;bottom:60px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sticky" aria-live="polite"><span>Motor inlet <strong id="sM">–</strong></span><span>Total flow <strong id="sQ">–</strong></span></div>
+<header class="top">
+  <div class="brand"><i></i>Cooling Loop Lab</div>
+  <nav class="nav" aria-label="Sections"><a href="#loop">Loop</a><a href="#hydraulics">Hydraulics</a><a href="#transient">Transient</a><a href="#checks">Checks</a><a href="#parts">Parts</a><a href="#method">Method</a></nav>
+  <span class="chip">Red Raider Racing · FSAE EV 2026–27</span>
+</header>
+
+<section class="band"><div class="wrap">
+  <div class="headline"><h1 id="title">Cooling Loop Lab</h1><p id="lede">–</p></div>
+  <div class="hero">
+    <div class="view" id="view">
+      <canvas id="gl" aria-label="3D cooling loop. Drag to orbit, scroll or pinch to zoom, shift-drag to pan, click a part for details."></canvas>
+      <div id="labels">
+        <div class="lbl" data-k="lpot"><span>Swirl pot <b id="lb1">–</b></span></div>
+        <div class="lbl" data-k="lmin"><span>Motor in <b id="lb2">–</b></span></div>
+        <div class="lbl" data-k="linv"><span>Inverter out <b id="lb3">–</b></span></div>
+        <div class="lbl" data-k="lrin"><span>Radiator in <b id="lb4">–</b></span></div>
+        <div class="lbl" data-k="lrout"><span>Radiator out <b id="lb5">–</b></span></div>
+        <div class="lbl" data-k="lfan"><span>Fan <b id="lb6">–</b></span></div>
+      </div>
+      <div class="vbar">
+        <div class="seg" role="group" aria-label="Render mode"><button id="vStudio" aria-pressed="false">Studio</button><button id="vThermal" aria-pressed="true">Thermal</button></div>
+        <div class="seg" role="group" aria-label="Overlays"><button id="vCut" aria-pressed="false">Cutaway</button><button id="vFlow" aria-pressed="true">Flow</button><button id="vSpin" aria-pressed="true">Spin</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="exp"><span>View</span><select id="vFocus" aria-label="Focus view" style="height:34px;width:auto;font-size:14px"><option value="loop">Whole loop</option><option value="pot">Swirl pot</option><option value="pump">Pump and Y split</option><option value="branches">Motor and inverter</option><option value="radiator">Radiator and fan</option></select></label><label class="exp">Explode <input type="range" id="vEx" min="0" max="1" step="0.01" value="0" aria-label="Explode"></label></div>
+      </div>
+      <div class="info" id="info" hidden><button class="x" id="infoX" aria-label="Close">×</button><h3 id="iName">–</h3><div id="iBody"></div></div>
+      <div class="legend">
+        <div class="cbar"><div class="g"></div><div class="ends"><span id="cLo">–</span><span>coolant temperature</span><span id="cHi">–</span></div></div>
+        <div class="hint">Drag to orbit · scroll to zoom · shift-drag to pan · click any part<br>Flow streaks in slow motion (1/12×), speed matches each branch</div>
+      </div>
+      <p id="noGL" hidden style="position:absolute;inset:auto 16px 50% 16px;text-align:center;color:var(--mute)">This browser has no WebGL2, so the 3D view is off. Every calculation below still works.</p>
+    </div>
+    <div class="side">
+      <div class="card">
+        <div class="big"><span class="k">Motor coolant inlet, steady state</span><div class="v" id="bT">–</div></div>
+        <p class="status" id="stat">–</p>
+        <div class="figs">
+          <div><span>Total flow</span><strong id="fQ">–</strong></div>
+          <div><span>Pump head</span><strong id="fH">–</strong></div>
+          <div><span>Motor branch</span><strong id="fQm">–</strong></div>
+          <div><span>Inverter branch</span><strong id="fQi">–</strong></div>
+          <div><span>Radiator heat out</span><strong id="fR">–</strong></div>
+          <div><span>Core face velocity</span><strong id="fV">–</strong></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tabs seg" role="tablist" aria-label="Inputs" id="tabs"></div>
+        <div class="ctl" id="ctl"></div>
+        <div class="presets" style="margin-top:16px" id="presets"></div>
+        <p style="font-size:13px;color:var(--dim);margin-top:8px">Presets are example conditions, not logged data. Endurance uses your 64 kW continuous design point.</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band sec" id="loop"><div class="wrap">
+  <div class="sechead"><h2 id="loopH">The loop at steady state</h2><p>Laid out top to bottom like the Cooling Calculator diagram: swirl pot highest, fan lowest. Temperatures come from the node-by-node energy balance; flows and pressures from the pump/system solve.</p></div>
+  <div class="grid2">
+    <div class="card"><div class="schem"><svg id="schem" role="img" aria-label="Loop schematic with node temperatures, flows and pressures"></svg></div></div>
+    <div class="card">
+      <h3>Node temperatures and pressures</h3>
+      <p class="note" id="balNote">–</p>
+      <div class="scroll"><table id="nodeT"></table></div>
+      <h3 style="margin-top:18px">Radiator (Radiator Flow Lab engine)</h3>
+      <div class="scroll"><table id="radT"></table></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band sec" id="hydraulics"><div class="wrap">
+  <div class="sechead"><h2 id="hydH">Hydraulic operating point</h2><p>The pump runs where its curve meets the system curve. The motor and inverter legs share one pressure drop, so the flow splits until both legs lose the same pressure.</p></div>
+  <div class="grid2">
+    <div class="card"><h3>Pump curve vs system curve</h3><p class="note" id="c1n">–</p><div class="fig"><svg id="c1"></svg></div></div>
+    <div class="card"><h3>Parallel branch split</h3><p class="note" id="c2n">–</p><div class="fig"><svg id="c2"></svg></div></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Pressure drop, element by element</h3><p class="note">Darcy–Weisbach with the Churchill friction factor for every hose (length measured from the 3D routing), K-values for bends, barbs, Y legs and sensors, and each component's own ΔP.</p><div class="scroll"><table id="dpT"></table></div></div>
+</div></section>
+
+<section class="band sec" id="transient"><div class="wrap">
+  <div class="sechead"><h2 id="trH">Endurance warm-up</h2><p>A lumped estimate: all coolant and loop metal as one thermal mass, heat in from the motor and inverter, heat out through the radiator at the solved flow, with the fan switching on a thermostat.</p></div>
+  <div class="card">
+    <p class="note" id="c3n">–</p>
+    <div class="fig" style="min-height:360px"><svg id="c3"></svg></div>
+    <div class="drop"><label for="csv">Overlay a MoTeC export (CSV with time, inverter temp, motor temp, radiator inlet temp, fan %):</label><input type="file" id="csv" accept=".csv,text/csv"><span id="csvNote"></span></div>
+  </div>
+</div></section>
+
+<section class="band sec" id="checks"><div class="wrap">
+  <div class="sechead"><h2 id="chkH">Checks</h2><p>Red items break a limit, with the margin shown. Amber items are inputs or rules that need confirming.</p></div>
+  <div class="flags" id="flags"></div>
+</div></section>
+
+<section class="band sec" id="parts"><div class="wrap">
+  <div class="sechead"><h2>Parts, mass and volume</h2><p>One parametric model drives every view. Click a part in the 3D view for its material, size, mounting and live numbers.</p></div>
+  <div class="grid2">
+    <div class="card"><h3>Parts list</h3><div class="scroll"><table id="partsT"></table></div></div>
+    <div class="card"><h3>Coolant volume</h3><div class="scroll"><table id="volT"></table></div><h3 style="margin-top:18px">Swirl pot V3, from the geometry</h3><div class="scroll"><table id="potT"></table></div></div>
+  </div>
+</div></section>
+
+<section class="band sec" id="method"><div class="wrap">
+  <h2 style="margin-bottom:14px">How it's calculated</h2>
+  <div class="method" id="methodBody"></div>
+</div></section>
+<footer class="band">Cooling Loop Lab · Red Raider Racing · correlation-based estimates for design, to be confirmed with CFD, bench flow tests and MoTeC data.</footer>
+
+<script>/*PHYS*/</script>
+<script>/*LAYOUT*/</script>
+<script>/*SOLVE*/</script>
+<script>/*GEOM*/</script>
+<script>/*R3D*/</script>
+<script>/*APP*/</script>
+</body>
+</html>

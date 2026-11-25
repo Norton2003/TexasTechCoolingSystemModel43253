@@ -1,0 +1,2015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cooling Loop Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: a race team's cooling-system design tool, precise and checkable, same family as Radiator Flow Lab
+   IDEA a CFD/CAE post-processing bench: dark viewport, thermal colour maps, a schematic and instruments around it
+   PICTURE the full 3D loop (swirl pot, pump, Y fittings, motor, inverter, radiator, fan) with coolant coloured by temperature
+   COLOUR graphite ground, aluminium greys, thermal ramp blue to red, one scarlet accent for limits and the operating point
+   TYPE Archivo for titles and big figures, Inter for text and numbers
+   LAYOUT laptop: viewport left, verdict + controls right, then schematic, hydraulics, transient, checks, parts, method; phone: stacked */
+:root{color-scheme:dark;--bg:#0b0e13;--panel:#12171f;--panel2:#171e28;--line:#243040;--ink:#e9eef4;--mute:#93a1b3;--dim:#64748a;--acc:#ef2b36;--ok:#3ccf91;--warn:#f3b13c;--cold:#3fa7d6}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:16px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:clip;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Archivo,Inter,sans-serif;letter-spacing:-.02em;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:clamp(26px,3.1vw,42px);font-weight:800}
+h2{font-size:clamp(22px,2.4vw,32px);font-weight:800}
+h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
+p{margin:0}a{color:#8fc8ff}
+.band{padding:clamp(22px,3vw,44px) max(4vw,16px)}
+.wrap{max-width:1360px;margin:0 auto}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px max(4vw,16px);border-bottom:1px solid var(--line);background:#0d1118;position:sticky;top:0;z-index:30}
+.brand{display:flex;gap:10px;align-items:center;font:700 16px Archivo,sans-serif}
+.brand i{width:26px;height:26px;border-radius:50%;background:conic-gradient(#2994db,#8ce0d1,#fae073,#f58c33,#db2133,#2994db);box-shadow:inset 0 0 0 7px #0d1118,0 0 0 1px #3a4656;display:block}
+.chip{font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:5px 11px;white-space:nowrap}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{font-size:14px;color:var(--mute);text-decoration:none;padding:6px 10px;border-radius:8px}
+.nav a:hover{color:var(--ink);background:var(--panel2)}
+.seg{display:inline-flex;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:600 14px Inter,sans-serif;color:var(--mute);background:none;border:0;border-radius:7px;padding:0 12px;min-height:36px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px #33425a}
+.seg button:hover{color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8fc8ff;outline-offset:2px}
+.headline{display:grid;gap:10px;margin-bottom:18px}
+.headline p{color:var(--mute);max-width:78ch}.headline b{color:var(--ink);font-weight:600}
+.hero{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:20px}
+.view{position:relative;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 20%,#18212d,#0b0e13 70%);border:1px solid var(--line);min-height:560px}
+.view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.view::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(5,7,10,.55))}
+.vbar{position:absolute;left:12px;right:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;pointer-events:none;z-index:3}
+.vbar>*{pointer-events:auto}
+.exp{display:flex;align-items:center;gap:8px;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:42px;font-size:14px;color:var(--mute)}
+.exp input{width:120px}
+.legend{position:absolute;left:14px;bottom:14px;right:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;pointer-events:none;flex-wrap:wrap;z-index:3}
+.cbar{display:grid;gap:4px;font-size:13px;color:var(--mute);width:min(300px,60%)}
+.cbar .g{height:9px;border-radius:5px;background:linear-gradient(90deg,#1c3a9e,#2994db,#8ce0d1,#fae073,#f58c33,#db2133)}
+.cbar .ends{display:flex;justify-content:space-between;white-space:nowrap}
+.hint{font-size:13px;color:var(--dim);text-align:right}
+#labels{position:absolute;inset:0;z-index:2;pointer-events:none}
+.lbl{position:absolute;left:0;top:0;width:0;height:0;transition:opacity .25s}
+.lbl::before{content:"";position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#e9eef4;box-shadow:0 0 0 3px rgba(233,238,244,.22)}
+.lbl::after{content:"";position:absolute;left:0;top:-34px;width:1px;height:30px;background:linear-gradient(rgba(233,238,244,.7),rgba(233,238,244,.15))}
+.lbl span{position:absolute;bottom:34px;left:0;transform:translateX(-50%);font-size:13px;line-height:1.25;white-space:nowrap;background:rgba(11,14,19,.85);border:1px solid #33425a;border-radius:8px;padding:5px 9px;backdrop-filter:blur(6px)}
+.lbl b{font-weight:600}
+.info{position:absolute;right:14px;top:66px;width:min(320px,calc(100% - 28px));z-index:4;background:rgba(13,17,24,.94);border:1px solid #3a4a62;border-radius:14px;padding:14px 16px;backdrop-filter:blur(8px);box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.info h3{margin-bottom:6px}.info dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:8px 0 0;font-size:14px}
+.info dt{color:var(--mute)}.info dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.info .x{position:absolute;right:8px;top:8px;background:none;border:0;color:var(--mute);font-size:20px;width:36px;height:36px;cursor:pointer;border-radius:8px}
+.side{display:grid;gap:14px;align-content:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.big .k{font-size:14px;color:var(--mute)}
+.big .v{font:800 clamp(44px,5vw,64px)/1 Archivo,sans-serif;letter-spacing:-.03em;white-space:nowrap}
+.big .v small{font-size:.42em;color:var(--mute);margin-left:4px}
+.status{font-size:14px;color:var(--mute);margin-top:6px}
+.good{color:var(--ok)}.bad{color:#ff6a6f}.warn{color:var(--warn)}
+.figs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.figs div{background:var(--panel);padding:10px 12px}
+.figs span{display:block;font-size:13px;color:var(--mute)}
+.figs strong{font:700 20px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tabs{margin:-4px 0 14px}
+.ctl{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:4px 10px;align-items:center}
+.row label{font-size:14px;font-weight:500}
+.row .sub{grid-column:1/-1;font-size:13px;color:var(--dim);margin-top:-2px}
+.num{display:flex;align-items:center;background:#0b0f15;border:1px solid #2e3b4e;border-radius:9px;padding:0 8px;height:40px}
+.num input{flex:1;width:0;background:none;border:0;color:var(--ink);font:500 16px Inter,sans-serif;font-variant-numeric:tabular-nums;text-align:right;padding:0;outline:none}
+.num em{font-style:normal;font-size:13px;color:var(--mute);margin-left:5px;white-space:nowrap}
+input[type=range]{grid-column:1/-1;-webkit-appearance:none;appearance:none;width:100%;height:28px;background:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e;margin-top:-8px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e}
+select{background:#0b0f15;color:var(--ink);border:1px solid #2e3b4e;border-radius:9px;height:40px;font:500 16px Inter,sans-serif;padding:0 8px;width:100%}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:40px;font-size:14px;font-weight:500}
+.sw{position:relative;width:50px;height:28px;border-radius:99px;background:#2a3545;border:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#f4f6f9;transition:transform .2s}
+.sw[aria-pressed=true]{background:var(--acc)}.sw[aria-pressed=true]::after{transform:translateX(22px)}
+.btn{font:600 14px Inter,sans-serif;color:var(--ink);background:var(--panel2);border:1px solid #33425a;border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer}
+.btn:hover{border-color:#5a6d88}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.sec{border-top:1px solid var(--line)}
+.sechead{display:flex;justify-content:space-between;gap:16px;align-items:end;flex-wrap:wrap;margin-bottom:16px}
+.sechead p{color:var(--mute);max-width:72ch}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid2>.card{display:flex;flex-direction:column}
+.fig{position:relative;min-height:300px;flex:1}
+.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.note{font-size:14px;color:var(--mute);margin:4px 0 10px}
+svg text{font:13px Inter,sans-serif;fill:var(--mute);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th{font-weight:600;color:var(--mute);font-size:13px}
+.flags{display:grid;gap:8px}
+.flag{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-size:14px;padding:10px 14px;border-radius:10px;background:#1c1012;border:1px solid #5b2329}
+.flag b{font-weight:600}.flag .m{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.flag.ok{background:#0f1a15;border-color:#21483a}
+.flag.cfm{background:#1a1610;border-color:#4d3a22}
+.flag small{grid-column:1/-1;color:var(--mute);font-size:13px}
+.schem{position:relative;min-height:640px;height:100%}
+.schem>svg{position:absolute;inset:0;width:100%;height:100%}
+.method{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.method p,.method li{color:#c3cdd9;font-size:15px}.method ul{margin:6px 0 0;padding-left:18px}
+.eq{font:15px/1.5 "Cambria Math","STIX Two Math",Georgia,serif;color:var(--ink);background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+.est{display:inline-block;font-size:12px;font-weight:600;color:var(--warn);border:1px solid #5a4520;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.drop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:14px;color:var(--mute)}
+.drop input[type=file]{font-size:14px;color:var(--mute)}
+footer{color:var(--dim);font-size:13px;border-top:1px solid var(--line)}
+.sticky{display:none}
+@media (min-width:1101px){.hero{grid-template-rows:clamp(620px,80vh,800px)}.side{display:flex;flex-direction:column;min-height:0}.side .card:last-child{flex:1;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:#33425a transparent}}
+@media (max-width:1100px){.hero{grid-template-columns:minmax(0,1fr)}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.side,.method{grid-template-columns:minmax(0,1fr)}.view{min-height:480px}.nav{display:none}.hint{display:none}
+ .sticky{display:flex;position:sticky;top:0;z-index:31;gap:12px;justify-content:space-between;align-items:center;background:rgba(11,14,19,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px 16px;font-size:14px}
+ .sticky strong{font:800 19px Archivo,sans-serif;white-space:nowrap}.top{position:static}
+ .lbl[data-k=lrout],.lbl[data-k=lfan],.lbl[data-k=lmin],.lbl[data-k=linv]{display:none}.schem{min-height:720px}
+ .view{min-height:560px}.vbar{top:8px;left:8px;right:8px;gap:6px}.vbar .seg button{min-height:32px;padding:0 9px;font-size:13px}.exp{min-height:36px;padding:0 8px;font-size:13px}.exp input{width:76px}.exp select{font-size:13px!important}.info{top:auto;bottom:60px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sticky" aria-live="polite"><span>Motor inlet <strong id="sM">–</strong></span><span>Total flow <strong id="sQ">–</strong></span></div>
+<header class="top">
+  <div class="brand"><i></i>Cooling Loop Lab</div>
+  <nav class="nav" aria-label="Sections"><a href="#loop">Loop</a><a href="#hydraulics">Hydraulics</a><a href="#transient">Transient</a><a href="#checks">Checks</a><a href="#parts">Parts</a><a href="#method">Method</a></nav>
+  <span class="chip">Red Raider Racing · FSAE EV 2026–27</span>
+</header>
+
+<section class="band"><div class="wrap">
+  <div class="headline"><h1 id="title">Cooling Loop Lab</h1><p id="lede">–</p></div>
+  <div class="hero">
+    <div class="view" id="view">
+      <canvas id="gl" aria-label="3D cooling loop. Drag to orbit, scroll or pinch to zoom, shift-drag to pan, click a part for details."></canvas>
+      <div id="labels">
+        <div class="lbl" data-k="lpot"><span>Swirl pot <b id="lb1">–</b></span></div>
+        <div class="lbl" data-k="lmin"><span>Motor in <b id="lb2">–</b></span></div>
+        <div class="lbl" data-k="linv"><span>Inverter out <b id="lb3">–</b></span></div>
+        <div class="lbl" data-k="lrin"><span>Radiator in <b id="lb4">–</b></span></div>
+        <div class="lbl" data-k="lrout"><span>Radiator out <b id="lb5">–</b></span></div>
+        <div class="lbl" data-k="lfan"><span>Fan <b id="lb6">–</b></span></div>
+      </div>
+      <div class="vbar">
+        <div class="seg" role="group" aria-label="Render mode"><button id="vStudio" aria-pressed="false">Studio</button><button id="vThermal" aria-pressed="true">Thermal</button></div>
+        <div class="seg" role="group" aria-label="Overlays"><button id="vCut" aria-pressed="false">Cutaway</button><button id="vFlow" aria-pressed="true">Flow</button><button id="vSpin" aria-pressed="true">Spin</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="exp"><span>View</span><select id="vFocus" aria-label="Focus view" style="height:34px;width:auto;font-size:14px"><option value="loop">Whole loop</option><option value="pot">Swirl pot</option><option value="pump">Pump and Y split</option><option value="branches">Motor and inverter</option><option value="radiator">Radiator and fan</option></select></label><label class="exp">Explode <input type="range" id="vEx" min="0" max="1" step="0.01" value="0" aria-label="Explode"></label></div>
+      </div>
+      <div class="info" id="info" hidden><button class="x" id="infoX" aria-label="Close">×</button><h3 id="iName">–</h3><div id="iBody"></div></div>
+      <div class="legend">
+        <div class="cbar"><div class="g"></div><div class="ends"><span id="cLo">–</span><span>coolant temperature</span><span id="cHi">–</span></div></div>
+        <div class="hint">Drag to orbit · scroll to zoom · shift-drag to pan · click any part<br>Flow streaks in slow motion (1/12×), speed matches each branch</div>
+      </div>
+      <p id="noGL" hidden style="position:absolute;inset:auto 16px 50% 16px;text-align:center;color:var(--mute)">This browser has no WebGL2, so the 3D view is off. Every calculation below still works.</p>
+    </div>
+    <div class="side">
+      <div class="card">
+        <div class="big"><span class="k">Motor coolant inlet, steady state</span><div class="v" id="bT">–</div></div>
+        <p class="status" id="stat">–</p>
+        <div class="figs">
+          <div><span>Total flow</span><strong id="fQ">–</strong></div>
+          <div><span>Pump head</span><strong id="fH">–</strong></div>
+          <div><span>Motor branch</span><strong id="fQm">–</strong></div>
+          <div><span>Inverter branch</span><strong id="fQi">–</strong></div>
+          <div><span>Radiator heat out</span><strong id="fR">–</strong></div>
+          <div><span>Core face velocity</span><strong id="fV">–</strong></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tabs seg" role="tablist" aria-label="Inputs" id="tabs"></div>
+        <div class="ctl" id="ctl"></div>
+        <div class="presets" style="margin-top:16px" id="presets"></div>
+        <p style="font-size:13px;color:var(--dim);margin-top:8px">Presets are example conditions, not logged data. Endurance uses your 64 kW continuous design point.</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band sec" id="loop"><div class="wrap">
+  <div class="sechead"><h2 id="loopH">The loop at steady state</h2><p>Laid out top to bottom like the Cooling Calculator diagram: swirl pot highest, fan lowest. Temperatures come from the node-by-node energy balance; flows and pressures from the pump/system solve.</p></div>
+  <div class="grid2">
+    <div class="card"><div class="schem"><svg id="schem" role="img" aria-label="Loop schematic with node temperatures, flows and pressures"></svg></div></div>
+    <div class="card">
+      <h3>Node temperatures and pressures</h3>
+      <p class="note" id="balNote">–</p>
+      <div class="scroll"><table id="nodeT"></table></div>
+      <h3 style="margin-top:18px">Radiator (Radiator Flow Lab engine)</h3>
+      <div class="scroll"><table id="radT"></table></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band sec" id="hydraulics"><div class="wrap">
+  <div class="sechead"><h2 id="hydH">Hydraulic operating point</h2><p>The pump runs where its curve meets the system curve. The motor and inverter legs share one pressure drop, so the flow splits until both legs lose the same pressure.</p></div>
+  <div class="grid2">
+    <div class="card"><h3>Pump curve vs system curve</h3><p class="note" id="c1n">–</p><div class="fig"><svg id="c1"></svg></div></div>
+    <div class="card"><h3>Parallel branch split</h3><p class="note" id="c2n">–</p><div class="fig"><svg id="c2"></svg></div></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Pressure drop, element by element</h3><p class="note">Darcy–Weisbach with the Churchill friction factor for every hose (length measured from the 3D routing), K-values for bends, barbs, Y legs and sensors, and each component's own ΔP.</p><div class="scroll"><table id="dpT"></table></div></div>
+</div></section>
+
+<section class="band sec" id="transient"><div class="wrap">
+  <div class="sechead"><h2 id="trH">Endurance warm-up</h2><p>A lumped estimate: all coolant and loop metal as one thermal mass, heat in from the motor and inverter, heat out through the radiator at the solved flow, with the fan switching on a thermostat.</p></div>
+  <div class="card">
+    <p class="note" id="c3n">–</p>
+    <div class="fig" style="min-height:360px"><svg id="c3"></svg></div>
+    <div class="drop"><label for="csv">Overlay a MoTeC export (CSV with time, inverter temp, motor temp, radiator inlet temp, fan %):</label><input type="file" id="csv" accept=".csv,text/csv"><span id="csvNote"></span></div>
+  </div>
+</div></section>
+
+<section class="band sec" id="checks"><div class="wrap">
+  <div class="sechead"><h2 id="chkH">Checks</h2><p>Red items break a limit, with the margin shown. Amber items are inputs or rules that need confirming.</p></div>
+  <div class="flags" id="flags"></div>
+</div></section>
+
+<section class="band sec" id="parts"><div class="wrap">
+  <div class="sechead"><h2>Parts, mass and volume</h2><p>One parametric model drives every view. Click a part in the 3D view for its material, size, mounting and live numbers.</p></div>
+  <div class="grid2">
+    <div class="card"><h3>Parts list</h3><div class="scroll"><table id="partsT"></table></div></div>
+    <div class="card"><h3>Coolant volume</h3><div class="scroll"><table id="volT"></table></div><h3 style="margin-top:18px">Swirl pot V3, from the geometry</h3><div class="scroll"><table id="potT"></table></div></div>
+  </div>
+</div></section>
+
+<section class="band sec" id="method"><div class="wrap">
+  <h2 style="margin-bottom:14px">How it's calculated</h2>
+  <div class="method" id="methodBody"></div>
+</div></section>
+<footer class="band">Cooling Loop Lab · Red Raider Racing · correlation-based estimates for design, to be confirmed with CFD, bench flow tests and MoTeC data.</footer>
+
+<script>// Radiator thermal-hydraulic model. Units: SI inside, mm for geometry inputs.
+function airProps(Tc, P) {
+  const T = Tc + 273.15;
+  const rho = P / (287.05 * T);
+  const mu = 1.716e-5 * Math.pow(T / 273.15, 1.5) * (273.15 + 110.4) / (T + 110.4);
+  const k = 0.0241 * Math.pow(T / 273.15, 0.81);
+  const cp = 1006 + 0.0004 * (T - 300) ** 2 * 0;
+  return { rho, mu, k, cp, Pr: mu * cp / k };
+}
+function coolantProps(Tc, type) {
+  const muW = 2.414e-5 * Math.pow(10, 247.8 / (Tc + 273.15 - 140));
+  if (type === 'eg50') {
+    return { rho: 1082 - 0.45 * Tc, cp: 3300 + 3.0 * Tc, mu: muW * 3.1, k: 0.38 + 0.0003 * Tc };
+  }
+  return { rho: 1000 - 0.0178 * Math.pow(Math.abs(Tc - 4), 1.7), cp: 4180 + 0.0 * Tc, mu: muW, k: 0.569 + 0.00188 * Tc - 7.9e-6 * Tc * Tc };
+}
+function pressureAt(alt) { return 101325 * Math.pow(1 - 2.25577e-5 * alt, 5.25588); }
+
+function solveRadiator(p) {
+  // geometry (m)
+  const W = p.W / 1000, H = p.H / 1000, D = p.D / 1000;
+  const Fp = p.Fp / 1000, Lp = p.Lp / 1000, Fl = p.Fl / 1000, df = p.df / 1000, Th = p.Th / 1000, tw = p.tw / 1000;
+  const theta = p.theta;
+  const Tp = Fl + Th;                       // tube pitch
+  const N = Math.max(1, Math.floor((H - Fl) / Tp)); // tubes (fin row above and below each)
+  const rows = N + 1;                       // fin rows incl. top/bottom against side plates
+  const Ll = 0.85 * Fl;                     // louver length
+  const nf = Math.floor(W / Fp);            // fins per row
+  const Afr = W * H;
+  const finFrontal = rows * Fl * W;         // open frontal band
+  const Ac = rows * Fl * W * (1 - df / Fp); // minimum free-flow area
+  const sigma = Ac / Afr;
+  const Afin = rows * nf * 2 * Fl * D;
+  const Atube = N * 2 * W * D * (1 - df / Fp);
+  const A = Afin + Atube;
+  const Dh = 4 * Ac * D / A;
+  // air
+  const P = pressureAt(p.alt);
+  const Tfilm = (p.TaIn + p.TcIn) / 2 * 0.5 + p.TaIn * 0.5;
+  const air = airProps(Tfilm, P);
+  const airIn = airProps(p.TaIn, P);
+  const Vf = p.Vface;  // face velocity (m/s), supplied or solved by operatingPoint()
+  const mA = airIn.rho * Vf * Afr;
+  const Vc = mA / (air.rho * Ac);
+  const ReLp = air.rho * Vc * Lp / air.mu;
+  // Chang & Wang (1997) j
+  const r = (x) => x / Lp;
+  const j = Math.pow(ReLp, -0.49) * Math.pow(theta / 90, 0.27) * Math.pow(r(Fp), -0.14) * Math.pow(r(Fl), -0.29)
+    * Math.pow(r(D), -0.23) * Math.pow(r(Ll), 0.68) * Math.pow(r(Tp), -0.28) * Math.pow(r(df), -0.05);
+  // Kim & Bullard (2002) f
+  const f = Math.pow(ReLp, -0.781) * Math.pow(theta / 90, 0.444) * Math.pow(r(Fp), -1.682) * Math.pow(r(Fl), -1.22)
+    * Math.pow(r(D), 0.818) * Math.pow(r(Ll), 1.97);
+  const G = mA / Ac;
+  const hA = j * G * air.cp * Math.pow(air.Pr, -2 / 3);
+  const kAl = 190;
+  const m = Math.sqrt(2 * hA / (kAl * df));
+  const Lf = Fl / 2;
+  const etaF = Math.tanh(m * Lf) / (m * Lf);
+  const eta0 = 1 - (Afin / A) * (1 - etaF);
+  // core friction (Kim & Bullard) + entrance/exit losses (Kays & London form)
+  const dPair = G * G / (2 * airIn.rho) * ((1 - sigma * sigma + 0.4) + f * (A / Ac) * (airIn.rho / air.rho) - (1 - sigma * sigma - 0.1));
+  // coolant
+  const cool = coolantProps(p.TcIn - 3, p.cool);
+  const Q = p.flow / 60000; // m3/s
+  const wi = D - 2 * tw, hi = Math.max(0.2e-3, Th - 2 * tw);
+  const Ai1 = wi * hi, Pi1 = 2 * (wi + hi);
+  const Dhi = 4 * Ai1 / Pi1;
+  const Vi = Q / (N * Ai1);
+  const Rei = cool.rho * Vi * Dhi / cool.mu;
+  const Pri = cool.mu * cool.cp / cool.k;
+  const Gz = Dhi * Rei * Pri / W;
+  const NuLam = 7.54 + 0.03 * Gz / (1 + 0.016 * Math.pow(Gz, 2 / 3));
+  let NuTurb = 0, fD;
+  if (Rei > 2300) {
+    const fd = Math.pow(0.790 * Math.log(Rei) - 1.64, -2);
+    NuTurb = (fd / 8) * (Rei - 1000) * Pri / (1 + 12.7 * Math.sqrt(fd / 8) * (Math.pow(Pri, 2 / 3) - 1));
+  }
+  let Nui;
+  if (Rei < 2300) Nui = NuLam;
+  else if (Rei < 4000) { const w = (Rei - 2300) / 1700; Nui = NuLam * (1 - w) + Math.max(NuLam, NuTurb) * w; }
+  else Nui = Math.max(NuLam, NuTurb);
+  const fLam = 96 / Rei * 0.86; // flat duct, aspect ~ 0.025 -> fRe ~ 89
+  const fTurb = Rei > 2300 ? Math.pow(0.790 * Math.log(Rei) - 1.64, -2) : 0;
+  fD = Rei < 2300 ? fLam : (Rei < 4000 ? fLam + (fTurb - fLam) * (Rei - 2300) / 1700 : fTurb);
+  const hi_ = Nui * cool.k / Dhi;
+  const Ai = N * Pi1 * W;
+  const dPcoreC = fD * (W / Dhi) * cool.rho * Vi * Vi / 2;
+  const dPtanks = 1.5 * cool.rho * Vi * Vi / 2 * 2; // contraction + expansion at tube ends
+  const dPcool = dPcoreC + dPtanks;
+  // overall
+  const Rw = tw / (kAl * N * 2 * D * W);
+  const UA = 1 / (1 / (eta0 * hA * A) + 1 / (hi_ * Ai) + Rw);
+  const Ca = mA * air.cp, mC = Q * cool.rho, Cc = mC * cool.cp;
+  const Cmin = Math.min(Ca, Cc), Cmax = Math.max(Ca, Cc), Cr = Cmin / Cmax;
+  const NTU = UA / Cmin;
+  const eps = 1 - Math.exp((1 / Cr) * Math.pow(NTU, 0.22) * (Math.exp(-Cr * Math.pow(NTU, 0.78)) - 1));
+  const Qw = eps * Cmin * (p.TcIn - p.TaIn);
+  const TcOut = p.TcIn - Qw / Cc, TaOut = p.TaIn + Qw / Ca;
+  const airPower = dPair * mA / airIn.rho;
+  // local face map: nx cells along tubes, rows of tubes; coolant flows +x
+  const nx = p.quick ? 1 : 48;
+  const UAc = UA / (nx * N), Cac = Ca / (nx * N), Cct = Cc / N;
+  const mapC = [], mapA = [];
+  for (let t = 0; t < N; t++) {
+    let Tc = p.TcIn; const rc = [], ra = [];
+    for (let i = 0; i < nx; i++) {
+      const e = 1 - Math.exp(-UAc / Cac);
+      const q = e * Cac * (Tc - p.TaIn);
+      ra.push(p.TaIn + q / Cac); rc.push(Tc - q / (2 * Cct));
+      Tc -= q / Cct;
+    }
+    mapC.push(rc); mapA.push(ra);
+  }
+  return { N, rows, nf, Tp, Ll, Afr, Ac, sigma, Afin, Atube, A, Dh, P, air, mA, Vc, ReLp, j, f, hA, etaF, eta0, dPair,
+    Vi, Rei, Dhi, Nui, hi: hi_, Ai, dPcool, UA, Ca, Cc, Cr, NTU, eps, Q: Qw, TcOut, TaOut, airPower, mapC, mapA, nx, rhoC: cool.rho };
+}
+// Air-side operating point: duct recovery of vehicle dynamic pressure + optional fan (linear curve) = core dP
+function operatingPoint(p) {
+  if (p.mode === 'tunnel') return p.Vface;
+  const P = pressureAt(p.alt), rho = P / (287.05 * (p.TaIn + 273.15));
+  const v = p.speed / 3.6;
+  const ram = p.Cp * 0.5 * rho * v * v;
+  const Afr = p.W * p.H / 1e6;
+  // fan pressure: tabulated curve when supplied (p.fanCurve(Q m3/s) -> Pa), otherwise the original straight-line curve
+  const fanDP = (Q) => p.fanCurve ? Math.max(0, p.fanCurve(Q)) : Math.max(0, p.fanP * (1 - Q / p.fanQ));
+  const avail = (V) => ram + (p.fan ? fanDP(V * Afr) : 0);
+  let lo = 0.01, hi = 40;
+  for (let i = 0; i < 34; i++) {
+    const mid = (lo + hi) / 2;
+    const dp = solveRadiator({ ...p, Vface: mid, quick: true }).dPair;
+    if (dp > avail(mid)) hi = mid; else lo = mid;
+  }
+  return Math.max(0.05, (lo + hi) / 2);
+}
+if (typeof module !== 'undefined') module.exports = { solveRadiator, pressureAt, operatingPoint };
+</script>
+<script>// Shared layout of the cooling loop: component positions (mm) and hose centre-lines.
+// x right, y up (gravity -y), z forward (air enters the radiator from +z).
+const IN = 25.4;
+const GEO = (() => {
+  const g = {};
+  // radiator: overall 11.75 x 4.875 x 3.8 in, core 9.25 x 4.5 x 2.0 in, side tanks, no reservoir
+  g.rad = { c: [0, 90, 0], W: 11.75 * IN, H: 4.875 * IN, D: 3.8 * IN, coreW: 9.25 * IN, coreH: 4.5 * IN, coreD: 2.0 * IN };
+  g.rad.tankW = (g.rad.W - g.rad.coreW) / 2;
+  const rc = g.rad.c, rW = g.rad.W, rH = g.rad.H;
+  g.radIn = [rc[0] - rW / 2 + g.rad.tankW / 2, rc[1] + rH / 2, 0]; // top of left tank, nipple up
+  g.radInEnd = [g.radIn[0], g.radIn[1] + 38, 0];
+  g.radOut = [rc[0] + rW / 2, rc[1] - rH / 2 + 22, 0]; // low on right tank, nipple outboard
+  g.radOutEnd = [g.radOut[0] + 38, g.radOut[1], 0];
+  // shroud + fan behind the core, lowest part of the system
+  g.shroudLen = 70;
+  g.fan = { D: 184, depth: 52.1, holes: 135, c: [rc[0], rc[1], -g.rad.coreD / 2 - g.shroudLen - 52.1 / 2] };
+  // Y merge above radiator inlet, components in parallel, Y split, pump, swirl pot on top
+  g.yMerge = { c: [g.radIn[0], 300, 0], flip: true };
+  g.motor = { c: [-330, 470, 0], D: 228, L: 86 };
+  g.inv = { c: [300, 470, 0], L: 420, Wd: 213, Hh: 77 };
+  g.ySplit = { c: [0, 640, 0], flip: false };
+  g.pump = { c: [0, 770, 0] };
+  // swirl pot V3 (inches)
+  const sp = g.pot = { ri: 1.25 * IN, ro: 2.625 / 2 * IN, body: 4.0 * IN, cone: 2.0 * IN, outRi: 0.625 / 2 * IN, nipRo: 0.75 / 2 * IN, nipL: 4.1 * IN, inletY: 3.4 * IN, capD: 2.75 * IN, capT: 0.125 * IN, open: 1.0 * IN, tubeRo: 0.75 / 2 * IN, wall: IN / 16 };
+  sp.base = 900 + sp.nipL + sp.cone; // y of body bottom (cone top)
+  sp.c = [0, sp.base, 0];
+  sp.nipBot = [0, sp.base - sp.cone - sp.nipL, 0];
+  sp.inletZ = -(sp.ri - (sp.tubeRo - sp.wall));
+  sp.inletEnd = [sp.ri + 62, sp.base + sp.inletY, sp.inletZ];
+  sp.top = sp.base + sp.body;
+  g.catchCan = { c: [-150, 1010, -70], D: 3.5 * IN, H: 7.0 * IN, wall: 0.065 * IN };
+  g.frame = { x: 640, zf: 190, zb: -200, y0: -40, y1: 1290 };
+  return g;
+})();
+function catmull(pts, step = 6) {
+  const out = [];
+  const P = [pts[0], ...pts, pts[pts.length - 1]];
+  for (let i = 1; i < P.length - 2; i++) {
+    const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+    const seg = Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]);
+    const n = Math.max(2, Math.ceil(seg / step));
+    for (let k = 0; k < n; k++) {
+      const t = k / n, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1, 2].map((j) => 0.5 * ((2 * p1[j]) + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3)));
+    }
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1], p[i][2] - p[i - 1][2]); return L; }
+function pathTurn(p) { // total turning angle (deg), used for bend losses
+  let a = 0;
+  for (let i = 1; i < p.length - 1; i++) {
+    const u = [p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1], p[i][2] - p[i - 1][2]], v = [p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1], p[i + 1][2] - p[i][2]];
+    const lu = Math.hypot(...u), lv = Math.hypot(...v); if (lu < 1e-6 || lv < 1e-6) continue;
+    a += Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv))));
+  }
+  return a * 180 / Math.PI;
+}
+// Port positions of fittings/components (hose attachment points, at the end of each barb)
+function ports() {
+  const g = GEO, P = {};
+  P.potOut = g.pot.nipBot;
+  P.pumpIn = [g.pump.c[0], g.pump.c[1] + 82, 0];
+  P.pumpOut = [g.pump.c[0] + 80, g.pump.c[1] + 27, 0];
+  const ys = g.ySplit.c, ym = g.yMerge.c;
+  // Y-fitting envelope 2.98 x 3.54 x 1.5 in: trunk barb tip 46 mm above centre, legs 44 mm below at +/-31 mm
+  P.ySplitIn = [ys[0], ys[1] + 46, 0];
+  P.ySplitM = [ys[0] - 31, ys[1] - 44, 0];
+  P.ySplitI = [ys[0] + 31, ys[1] - 44, 0];
+  P.yMergeOut = [ym[0], ym[1] - 46, 0];
+  P.yMergeM = [ym[0] - 31, ym[1] + 44, 0];
+  P.yMergeI = [ym[0] + 31, ym[1] + 44, 0];
+  const m = g.motor;
+  // EMRAX liquid ports sit on the stator (mounting) side near the centre
+  P.motorIn = [m.c[0] + 48, m.c[1] + 26, -m.L / 2 - 34];
+  P.motorOut = [m.c[0] + 48, m.c[1] - 26, -m.L / 2 - 34];
+  const v = g.inv;
+  P.invIn = [v.c[0] - v.L / 2 - 34, v.c[1] + 18, 50];
+  P.invOut = [v.c[0] - v.L / 2 - 34, v.c[1] - 18, -50];
+  P.radIn = g.radInEnd; P.radOut = g.radOutEnd;
+  P.potIn = g.pot.inletEnd;
+  return P;
+}
+// Hose runs: id, from, to, waypoints, line (pump/motor/inv/main/return)
+function hoseRuns() {
+  const P = ports(), g = GEO;
+  const runs = [
+    { id: 'h1', name: 'Swirl pot → pump', line: 'pump', pts: [P.potOut, [0, P.potOut[1] - 20, 0], [0, P.pumpIn[1] + 18, 0], P.pumpIn] },
+    { id: 'h2', name: 'Pump → Y split', line: 'pump', pts: [P.pumpOut, [P.pumpOut[0] + 30, P.pumpOut[1] - 10, 0], [60, 712, 0], [P.ySplitIn[0] + 10, P.ySplitIn[1] + 26, 0], P.ySplitIn], sensor: 'flow' },
+    { id: 'h3m', name: 'Y split → motor', line: 'motor', pts: [P.ySplitM, [P.ySplitM[0] - 30, P.ySplitM[1] - 40, 10], [-140, 560, -40], [P.motorIn[0] + 30, P.motorIn[1] + 16, P.motorIn[2] - 26], P.motorIn], sensor: 'Tmotor' },
+    { id: 'h4m', name: 'Motor → Y merge', line: 'motor', pts: [P.motorOut, [P.motorOut[0] + 30, P.motorOut[1] - 16, P.motorOut[2] - 26], [-150, 380, -50], [P.yMergeM[0] - 30, P.yMergeM[1] + 40, 10], P.yMergeM] },
+    { id: 'h3i', name: 'Y split → inverter', line: 'inv', pts: [P.ySplitI, [P.ySplitI[0] + 30, P.ySplitI[1] - 40, 10], [80, 520, 50], [P.invIn[0] - 20, P.invIn[1] + 4, P.invIn[2]], P.invIn] },
+    { id: 'h4i', name: 'Inverter → Y merge', line: 'inv', pts: [P.invOut, [P.invOut[0] - 24, P.invOut[1] - 6, P.invOut[2]], [-30, 400, -30], [P.yMergeI[0] + 26, P.yMergeI[1] + 40, -10], P.yMergeI], sensor: 'Tinv' },
+    { id: 'h5', name: 'Y merge → radiator in', line: 'main', pts: [P.yMergeOut, [P.yMergeOut[0], P.yMergeOut[1] - 25, 0], [P.radIn[0], P.radIn[1] + 22, 0], P.radIn], sensor: 'TradIn' },
+    { id: 'h6', name: 'Return: radiator out → swirl pot', line: 'return', pts: [P.radOut, [P.radOut[0] + 40, P.radOut[1] + 4, -20], [250, 120, -150], [250, 700, -160], [210, 1000, -120], [P.potIn[0] + 60, P.potIn[1] - 8, P.potIn[2] - 10], P.potIn], sensor: 'TradOut' }
+  ];
+  for (const r of runs) { r.path = catmull(r.pts, 5); r.L = pathLen(r.path); r.turn = pathTurn(r.path); }
+  return runs;
+}
+if (typeof module !== 'undefined') module.exports = { GEO, hoseRuns, ports, catmull, pathLen, pathTurn, IN };
+</script>
+<script>// Cooling-loop solver: pump curve, parallel branch split (equal dP), node-by-node energy balance closed through
+// the Radiator Flow Lab engine (solveRadiator / operatingPoint, unchanged), lumped transient, rule/limit checks.
+const LPM = 1 / 60000; // L/min -> m3/s
+const G0 = 9.81;
+// SPAL VA22-BP11/C-50S fan curve (m3/s, Pa), from the brief
+const SPAL = [[0.046, 248], [0.050, 224], [0.057, 203], [0.073, 174], [0.089, 124], [0.109, 100], [0.123, 74], [0.133, 49], [0.141, 24], [0.148, 0]];
+function spalDP(Q) {
+  if (Q <= SPAL[0][0]) return SPAL[0][1];
+  for (let i = 1; i < SPAL.length; i++) if (Q <= SPAL[i][0]) { const [a, b] = [SPAL[i - 1], SPAL[i]]; return a[1] + (b[1] - a[1]) * (Q - a[0]) / (b[0] - a[0]); }
+  return 0;
+}
+// Davies Craig EBP40 24 V: shut-off 85 kPa, 10 kPa at 35.5 L/min, 0 at 37 L/min. Middle of curve interpolated
+// as H = H0 - (H0 - 10)(Q/35.5)^2, linear from 35.5 to 37. Other voltages: affinity laws with speed ∝ voltage (assumed).
+const PUMP = { H0: 85000, Q1: 35.5, H1: 10000, Qmax: 37 };
+function pumpH24(qL) {
+  if (qL <= 0) return PUMP.H0;
+  if (qL <= PUMP.Q1) return PUMP.H0 - (PUMP.H0 - PUMP.H1) * (qL / PUMP.Q1) ** 2;
+  if (qL <= PUMP.Qmax) return PUMP.H1 * (PUMP.Qmax - qL) / (PUMP.Qmax - PUMP.Q1);
+  return 0;
+}
+function pumpH(qL, V) { const s = V / 24; return s * s * pumpH24(qL / s); }
+// Water properties (plain water) from the Radiator Flow Lab engine
+const water = (T) => coolantProps(T + 3, 'water'); // engine evaluates at TcIn-3; pass T+3 to evaluate exactly at T
+// Darcy friction factor, Churchill (1977): laminar, transition and turbulent in one expression
+function fDarcy(Re, rel) {
+  if (Re < 1) Re = 1;
+  const A = Math.pow(2.457 * Math.log(1 / (Math.pow(7 / Re, 0.9) + 0.27 * rel)), 16), B = Math.pow(37530 / Re, 16);
+  return 8 * Math.pow(Math.pow(8 / Re, 12) + 1 / Math.pow(A + B, 1.5), 1 / 12);
+}
+const K = { bend90: 0.25, barb: 0.3, ySplitLeg: 1.0, yMergeLeg: 1.0, potIn: 1.0, potOut: 0.5, sensorT: 0.2, flowSensor: 1.5, radNipple: 0.3 };
+function defaultInputs() {
+  return {
+    pumpV: 24, fan: true, fanOnT: 45, fanHyst: 3, speed: 50, TaIn: 32.2, alt: 300, Cp: 0.4,
+    qMotor: 3.89, qInv: 0.813, qRotor: 1.67,
+    idMain: 0.75, idMotor: 0.4375, idInv: 0.5625, idReturn: 0.75,
+    orificeMM: 0, capBar: 0.9, volL: 6.9, metalKg: 4.2, minutes: 25, driverChange: true, lapAmp: 0.3, loadPct: 100
+  };
+}
+const RADCORE = { W: 235, H: 114.3, D: 50.8, Fp: 25.4 / 20, Lp: 1.2, Fl: 8, df: 0.1, Th: 1.8, tw: 0.3, theta: 27 };
+function radInputs(s, Tin, flowL, overrides) {
+  return { ...RADCORE, alt: s.alt, TaIn: s.TaIn, TcIn: Tin, flow: Math.max(0.2, flowL), cool: 'water', mode: 'drive', speed: s.speed, Cp: s.Cp, fan: s.fan, fanCurve: spalDP, ...(overrides || {}) };
+}
+function faceVelocity(s, overrides) { return operatingPoint(radInputs(s, 60, 10, overrides)); }
+
+// --------- hydraulics ---------
+function buildNet(s, runs) {
+  const D = (inch) => inch * 0.0254;
+  const lineID = { pump: D(s.idMain), main: D(s.idMain), return: D(s.idReturn), motor: D(s.idMotor), inv: D(s.idInv) };
+  const hoses = runs.map((r) => ({ id: r.id, name: r.name, line: r.line, L: r.L / 1000, D: lineID[r.line], Kb: K.bend90 * r.turn / 90, sensor: r.sensor }));
+  return { hoses, orifice: s.orificeMM / 1000, Dinv: lineID.inv };
+}
+function hoseDP(h, Q, w, extraK) {
+  const A = Math.PI * h.D * h.D / 4, V = Q / A, Re = w.rho * V * h.D / w.mu, f = fDarcy(Re, 1.5e-6 / h.D);
+  const K_ = h.Kb + 2 * K.barb + (extraK || 0) + (h.sensor === 'flow' ? K.flowSensor : h.sensor ? K.sensorT : 0);
+  const fr = f * h.L / h.D * w.rho * V * V / 2, mi = K_ * w.rho * V * V / 2;
+  return { dp: fr + mi, fr, mi, V, Re, f, K: K_ };
+}
+const motorDP = (qL) => 50000 * (qL / 6) ** 2;      // EMRAX 228: 0.5 bar at 6 L/min, ∝ Q² (assumed)
+const invDP = (qL) => 5000 * (qL / 11.67) ** 2;     // DTI HV-500LC: 0.05 bar at 11.67 L/min, ∝ Q² (needs datasheet check)
+function branchDP(net, which, Q, w) {
+  const hs = net.hoses.filter((h) => h.line === which);
+  let dp = 0; const parts = [];
+  for (const h of hs) { const isIn = h.id.startsWith('h3'); const r = hoseDP(h, Q, w, isIn ? K.ySplitLeg : K.yMergeLeg); dp += r.dp; parts.push({ name: h.name, ...r }); }
+  const comp = which === 'motor' ? motorDP(Q / LPM) : invDP(Q / LPM);
+  dp += comp; parts.push({ name: which === 'motor' ? 'EMRAX 228 stator jacket' : 'HV-500LC cold plate', dp: comp, comp: true });
+  if (which === 'inv' && net.orifice > 0) { // sharp-edged restrictor in the inverter leg (optional), Cd = 0.62
+    const d = Math.min(net.orifice, net.Dinv * 0.95), b = d / net.Dinv, Ao = Math.PI * d * d / 4;
+    const dpo = (1 - b ** 4) / (0.62 * 0.62) * w.rho / 2 * (Q / Ao) ** 2; dp += dpo; parts.push({ name: 'Restrictor orifice ' + (d * 1000).toFixed(1) + ' mm', dp: dpo, comp: true });
+  }
+  return { dp, parts };
+}
+function splitFlow(net, Q, w) {
+  let lo = 0, hi = Q;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; const g = branchDP(net, 'motor', m, w).dp - branchDP(net, 'inv', Q - m, w).dp; if (g > 0) hi = m; else lo = m; }
+  const qm = (lo + hi) / 2, bm = branchDP(net, 'motor', qm, w), bi = branchDP(net, 'inv', Q - qm, w);
+  return { qm, qi: Q - qm, dp: (bm.dp + bi.dp) / 2, bm, bi, mismatch: Math.abs(bm.dp - bi.dp) };
+}
+function seriesDP(net, Q, w, radDP) {
+  const parts = [];
+  for (const h of net.hoses.filter((x) => x.line === 'pump' || x.line === 'main' || x.line === 'return')) {
+    const ek = h.id === 'h6' ? K.potIn : h.id === 'h1' ? K.potOut : h.id === 'h5' ? K.radNipple : 0;
+    parts.push({ name: h.name, ...hoseDP(h, Q, w, ek) });
+  }
+  // swirl pot outlet nipple (5/8 in ID x 4.1 in) friction
+  const dn = 0.625 * 0.0254, An = Math.PI * dn * dn / 4, Vn = Q / An, Ren = w.rho * Vn * dn / w.mu;
+  parts.push({ name: 'Swirl pot outlet nipple', dp: fDarcy(Ren, 1e-4) * 0.104 / dn * w.rho * Vn * Vn / 2, V: Vn });
+  parts.push({ name: 'Radiator core + tanks (Flow Lab engine)', dp: radDP(Q), comp: true });
+  return { dp: parts.reduce((a, p) => a + p.dp, 0), parts };
+}
+function solveHydraulics(s, runs, Tmean, radDPfn) {
+  const w = water(Tmean), net = buildNet(s, runs);
+  const qmaxL = PUMP.Qmax * s.pumpV / 24;
+  const sys = (QL) => { const Q = QL * LPM; const sp = splitFlow(net, Q, w); const se = seriesDP(net, Q, w, radDPfn); return { total: sp.dp + se.dp, sp, se }; };
+  let lo = 0.05, hi = qmaxL * 0.999;
+  for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (pumpH(m, s.pumpV) > sys(m).total) lo = m; else hi = m; }
+  const QL = (lo + hi) / 2, r = sys(QL);
+  return { QL, H: pumpH(QL, s.pumpV), sysDP: r.total, split: r.sp, series: r.se, net, w, sysFn: (q) => sys(q).total, qmaxL };
+}
+
+// --------- full steady solve ---------
+function solveLoop(s, runs) {
+  const Vf = faceVelocity(s);
+  const radAt = (Tin, flowL) => solveRadiator({ ...radInputs(s, Tin, flowL), Vface: Vf, VfaceSolved: Vf });
+  let Tmean = s.TaIn + 15, hyd = null, th = null;
+  for (let it = 0; it < 4; it++) {
+    const radDPfn = (Q) => radAt(Tmean, Q / LPM).dPcool;
+    hyd = solveHydraulics(s, runs, Tmean, radDPfn);
+    th = thermal(s, hyd, radAt);
+    if (!th.ok) break;
+    const Tn = (th.T.potOut + th.T.radIn) / 2;
+    if (Math.abs(Tn - Tmean) < 0.05) { Tmean = Tn; break; }
+    Tmean = Tn;
+  }
+  const rad = th.rad;
+  const res = { s, Vf, hyd, th, rad, runs };
+  res.pressures = pressures(s, hyd, runs);
+  // heat load that would put the motor inlet exactly at 50 °C (temperatures scale ~linearly with load at fixed flows)
+  res.maxLoadKW = th.ok ? (th.balance.Qload / 1000) * (50 - s.TaIn) / Math.max(0.01, th.T.motorIn - s.TaIn) : 0;
+  res.volGeomL = geomVolume(s, hyd.net);
+  res.checks = checks(res);
+  return res;
+}
+function thermal(s, hyd, radAt) {
+  const w = water(50), cp = w.cp;
+  const mdot = hyd.QL * LPM * w.rho, mm = hyd.split.qm * w.rho, mi = hyd.split.qi * w.rho;
+  const Qm = s.qMotor * 1000 * s.loadPct / 100, Qi = s.qInv * 1000 * s.loadPct / 100, Qload = Qm + Qi;
+  const march = (T0) => {
+    const T = { potOut: T0, pumpOut: T0, ySplit: T0, motorIn: T0, invIn: T0 };
+    T.motorOut = T0 + Qm / Math.max(1e-6, mm * cp); T.invOut = T0 + Qi / Math.max(1e-6, mi * cp);
+    T.yMerge = (mm * T.motorOut + mi * T.invOut) / Math.max(1e-9, mm + mi);
+    T.radIn = T.yMerge;
+    const rad = radAt(T.radIn, hyd.QL);
+    T.radOut = T.radIn - rad.Q / (mdot * cp);
+    T.potIn = T.radOut;
+    return { T, rad };
+  };
+  // fixed point: radiator outlet must return to the assumed swirl-pot temperature
+  let lo = s.TaIn + 0.01, hi = s.TaIn + 160, ok = true;
+  const g = (T0) => march(T0).T.radOut - T0;
+  if (g(hi) > 0) ok = false;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (g(m) > 0) lo = m; else hi = m; }
+  const T0 = (lo + hi) / 2, M = march(T0);
+  const balance = { Qload, Qrad: M.rad.Q, err: (M.rad.Q - Qload) / Qload };
+  return { ok, T: M.T, rad: M.rad, mdot, mm, mi, Qm, Qi, cp, balance };
+}
+function pressures(s, hyd, runs) {
+  // gauge pressure along the loop, worst case: swirl pot held at cap pressure; static head from layout heights (m)
+  const w = hyd.w, rg = w.rho * G0 / 1000, pot = s.capBar * 1e5, hPot = (GEO.pot.base + GEO.pot.body * 0.5) / 1000;
+  const P = ports(), y = (p) => p[1] / 1000;
+  const se = hyd.series.parts, find = (n) => (se.find((p) => p.name.startsWith(n)) || { dp: 0 }).dp;
+  const pumpIn = pot + w.rho * G0 * (hPot - y(P.pumpIn)) - find('Swirl pot →') - find('Swirl pot outlet');
+  const pumpOut = pumpIn + hyd.H;
+  const ySplit = pumpOut - find('Pump →') + w.rho * G0 * (y(P.pumpOut) - y(P.ySplitIn));
+  const bm = hyd.split.bm.parts, bi = hyd.split.bi.parts;
+  const motorIn = ySplit - bm[0].dp + w.rho * G0 * (y(P.ySplitM) - y(P.motorIn));
+  const invIn = ySplit - bi[0].dp + w.rho * G0 * (y(P.ySplitI) - y(P.invIn));
+  const yMerge = ySplit - hyd.split.dp + w.rho * G0 * (y(P.ySplitM) - y(P.yMergeM));
+  const radIn = yMerge - find('Y merge') + w.rho * G0 * (y(P.yMergeOut) - y(P.radIn));
+  const radOut = radIn - find('Radiator core') + w.rho * G0 * (y(P.radIn) - y(P.radOut));
+  return { pot, pumpIn, pumpOut, ySplit, motorIn, invIn, yMerge, radIn, radOut };
+}
+function tsat(s) { const Pabs = s.capBar * 1e5 + pressureAt(s.alt); return 1 / (1 / 373.15 - 8.314 / 40650 * Math.log(Pabs / 101325)) - 273.15; }
+function checks(R) {
+  const s = R.s, T = R.th.T, h = R.hyd, out = [];
+  const add = (ok, label, value, limit, margin, note) => out.push({ ok, label, value, limit, margin, note });
+  const qmL = h.split.qm / LPM, qiL = h.split.qi / LPM;
+  if (!R.th.ok) add(false, 'Steady state', 'none', 'radiator must reject the load', '', 'The radiator cannot reject this heat load below 190 °C: no steady state.');
+  add(T.motorIn <= 50, 'Motor coolant inlet', T.motorIn, 50, 50 - T.motorIn, 'EMRAX 228 coolant inlet max 50 °C');
+  add(T.invIn <= 60, 'Inverter coolant inlet', T.invIn, 60, 60 - T.invIn, 'HV-500LC coolant max 60 °C (continuous 50, goal 40)');
+  const Ts = tsat(s), Tmax = Math.max(T.motorOut, T.invOut, T.radIn);
+  add(Tmax < Ts, 'Hottest coolant vs boiling at cap pressure', Tmax, +Ts.toFixed(1), Ts - Tmax, 'Saturation temperature at cap rating + site air pressure (Clausius–Clapeyron)');
+  add(T.invIn <= 50, 'Inverter coolant, continuous rating', T.invIn, 50, 50 - T.invIn, 'Continuous 50 °C');
+  add(qmL >= 6 && qmL <= 11, 'Motor flow', qmL, '6–11', qmL < 6 ? qmL - 6 : 11 - qmL, 'EMRAX datasheet coolant flow 6–11 L/min');
+  const pr = R.pressures;
+  add(pr.invIn <= 2e5, 'Inverter inlet pressure', pr.invIn / 1e5, 2.0, 2.0 - pr.invIn / 1e5, 'HV-500LC max 2 bar; worst case with swirl pot at cap pressure');
+  add(h.H <= 85000 * (s.pumpV / 24) ** 2 + 1, 'Pump differential head', h.H / 1e5, (0.85 * (s.pumpV / 24) ** 2), 0.85 * (s.pumpV / 24) ** 2 - h.H / 1e5, 'EBP40 max head 0.85 bar at 24 V');
+  add(pr.pumpOut <= 2.5e5, 'Pump housing pressure', pr.pumpOut / 1e5, 2.5, 2.5 - pr.pumpOut / 1e5, 'Retailer listing: burst pressure 250 kPa');
+  add(pr.pumpIn > 0.2e5 - 1e5, 'Pump inlet pressure (cavitation margin)', pr.pumpIn / 1e5, '> −0.8', pr.pumpIn / 1e5 + 0.8, 'Gauge; low inlet pressure risks cavitation when not pressurised');
+  for (const x of [...h.series.parts, ...h.split.bm.parts, ...h.split.bi.parts]) if (x.V != null && !x.comp) add(x.V <= 3, 'Velocity: ' + x.name, x.V, 3, 3 - x.V, 'Hose velocity guideline ~3 m/s');
+  add(h.QL >= 28, 'Total flow vs 28 L/min target', h.QL, 28, h.QL - 28, 'Your target; pump can only deliver what the system curve allows');
+  add(qiL >= 11.67, 'Inverter flow vs 11.67 L/min target', qiL, 11.67, qiL - 11.67, 'Your target');
+  const bal = R.th.balance;
+  add(Math.abs(bal.err) < 0.005, 'Energy balance closes', bal.err * 100, '±0.5 %', 0.5 - Math.abs(bal.err * 100), 'Radiator heat out vs motor + inverter heat in');
+  return out;
+}
+
+function geomVolume(s, net) {
+  let v = 0; for (const h of net.hoses) v += Math.PI * h.D * h.D / 4 * h.L * 1000;
+  const p = GEO.pot, potV = (Math.PI * p.ri ** 2 * p.body + Math.PI * p.cone / 3 * (p.ri ** 2 + p.ri * p.outRi + p.outRi ** 2) + Math.PI * p.outRi ** 2 * p.nipL) / 1e6;
+  return { hoses: v, pot: potV, radiator: 1.0, motor: 0.1, inverter: 0.1, pump: 0.05, yFittings: 0.04, total: v + potV + 1.0 + 0.1 + 0.1 + 0.05 + 0.04 };
+}
+function potVolumeL() { const p = GEO.pot; return { body: Math.PI * p.ri ** 2 * p.body / 1e6, cone: Math.PI * p.cone / 3 * (p.ri ** 2 + p.ri * p.outRi + p.outRi ** 2) / 1e6 }; }
+// --------- lumped transient ---------
+function transient(s, R) {
+  const w = water(50), C = s.volL * w.rho / 1000 * w.cp + s.metalKg * 900;
+  const mdot = R.th.mdot, cp = R.th.cp, dTload = (Qm, Qi) => (Qm + Qi) / (mdot * cp);
+  // radiator conductance per °C of inlet-to-ambient difference for each airflow case (linearised from the engine)
+  const perK = (speed, fan) => {
+    const o = { speed, fan }; const Vf = faceVelocity(s, o); const Tin = s.TaIn + 25;
+    const r = solveRadiator({ ...radInputs(s, Tin, R.hyd.QL, o), Vface: Vf, quick: true }); return r.Q / 25;
+  };
+  const k = { dOn: perK(s.speed, true), dOff: perK(s.speed, false), sOn: perK(0, true), sOff: perK(0, false) };
+  const total = s.minutes * 60, dt = 1, out = [];
+  let T0 = s.TaIn, fan = false;
+  const Qm0 = s.qMotor * 1000 * s.loadPct / 100, Qi0 = s.qInv * 1000 * s.loadPct / 100;
+  const chg = s.driverChange ? [total / 2, total / 2 + 180] : null;
+  for (let t = 0; t <= total + (chg ? 180 : 0); t += dt) {
+    const stopped = chg && t >= chg[0] && t < chg[1];
+    const lap = 1 + s.lapAmp * Math.sin(2 * Math.PI * t / 75);
+    const Qm = stopped ? 0 : Qm0 * lap, Qi = stopped ? 0 : Qi0 * lap;
+    const Tmix = T0 + dTload(Qm, Qi);
+    if (!s.fan) fan = false; else if (Tmix > s.fanOnT) fan = true; else if (Tmix < s.fanOnT - s.fanHyst) fan = false;
+    const kk = stopped ? (fan ? k.sOn : k.sOff) : (fan ? k.dOn : k.dOff);
+    const Qr = kk * Math.max(0, Tmix - s.TaIn);
+    if (t % 5 === 0) out.push({ t, motorIn: T0, invOut: T0 + Qi / (R.th.mi * cp), radIn: Tmix, motorOut: T0 + Qm / (R.th.mm * cp), fan, stopped, Qload: Qm + Qi, Qr });
+    T0 += (Qm + Qi - Qr) / C * dt;
+  }
+  return { pts: out, C, k, chg };
+}
+if (typeof module !== 'undefined') module.exports = { tsat, solveLoop, transient, defaultInputs, pumpH, spalDP, PUMP, LPM, water, fDarcy, K };
+</script>
+<script>// Geometry helpers shared with Radiator Flow Lab
+const M4 = {
+  id() { const o = new Float32Array(16); o[0] = o[5] = o[10] = o[15] = 1; return o; },
+  persp(fov, a, n, f) { const t = 1 / Math.tan(fov / 2), o = new Float32Array(16); o[0] = t / a; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f); return o; },
+  ortho(l, r, b, t, n, f) { const o = new Float32Array(16); o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = -2 / (f - n); o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = -(f + n) / (f - n); o[15] = 1; return o; },
+  look(e, c, u) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2]; let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0, -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
+  },
+  mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  tr(x, y, z) { const o = M4.id(); o[12] = x; o[13] = y; o[14] = z; return o; },
+  rz(a) { const o = M4.id(), c = Math.cos(a), s = Math.sin(a); o[0] = c; o[1] = s; o[4] = -s; o[5] = c; return o; }
+};
+
+// ---------------- geometry ----------------
+class GB {
+  constructor() { this.P = []; this.N = []; this.U = []; this.I = []; }
+  v(p, n, u) { this.P.push(p[0], p[1], p[2]); this.N.push(n[0], n[1], n[2]); this.U.push(u ? u[0] : 0, u ? u[1] : 0); return this.P.length / 3 - 1; }
+  q(a, b, c, d) { this.I.push(a, b, c, a, c, d); }
+  add(m, off) { const b = this.P.length / 3; for (let i = 0; i < m.P.length; i += 3) { this.P.push(m.P[i] + off[0], m.P[i + 1] + off[1], m.P[i + 2] + off[2]); } this.N.push(...m.N); this.U.push(...m.U); for (const i of m.I) this.I.push(i + b); return this; }
+  done() { return { P: new Float32Array(this.P), N: new Float32Array(this.N), U: new Float32Array(this.U), I: new Uint32Array(this.I) }; }
+}
+const nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function roundedBox(w, h, d, r, k = 6) {
+  const g = new GB(), H = [w / 2, h / 2, d / 2];
+  r = Math.min(r, H[0], H[1], H[2]) * 0.999;
+  const co = (hh) => { const a = []; for (let i = 0; i <= k; i++) a.push(-hh + r * i / k); a.push(-hh * 0.33, hh * 0.33); for (let i = k; i >= 0; i--) a.push(hh - r * i / k); a.sort((x, y) => x - y); return a.filter((v, i, s) => i === 0 || Math.abs(v - s[i - 1]) > 1e-6); };
+  for (let ax = 0; ax < 3; ax++) for (const sg of [-1, 1]) {
+    const b = (ax + 1) % 3, c = (ax + 2) % 3, cb = co(H[b]), cc = co(H[c]), base = g.P.length / 3;
+    for (let i = 0; i < cb.length; i++) for (let j = 0; j < cc.length; j++) {
+      const p = [0, 0, 0]; p[ax] = sg * H[ax]; p[b] = cb[i]; p[c] = cc[j];
+      const inner = p.map((v, a) => Math.max(-(H[a] - r), Math.min(H[a] - r, v)));
+      let dv = [p[0] - inner[0], p[1] - inner[1], p[2] - inner[2]], l = Math.hypot(...dv);
+      const n = l > 1e-6 ? dv.map((v) => v / l) : (() => { const f = [0, 0, 0]; f[ax] = sg; return f; })();
+      g.v([inner[0] + n[0] * r, inner[1] + n[1] * r, inner[2] + n[2] * r], n, [i / (cb.length - 1), j / (cc.length - 1)]);
+    }
+    for (let i = 0; i < cb.length - 1; i++) for (let j = 0; j < cc.length - 1; j++) { const a = base + i * cc.length + j; g.q(a, a + cc.length, a + cc.length + 1, a + 1); }
+  }
+  return g.done();
+}
+function sweep(path, rad, seg = 20, closed = false) {
+  const g = new GB(), n = path.length;
+  const T = path.map((p, i) => { const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)]; if (closed) { const a2 = path[(i - 1 + n) % n], b2 = path[(i + 1) % n]; return nrm([b2[0] - a2[0], b2[1] - a2[1], b2[2] - a2[2]]); } return nrm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]); });
+  let up = Math.abs(T[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let Nn = nrm(cross(cross(T[0], up), T[0]));
+  let len = 0;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) { const t = T[i]; const b = cross(t, Nn); Nn = nrm(cross(b, t)); len += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2]); }
+    const B = cross(T[i], Nn), R = typeof rad === 'function' ? rad(i / (n - 1)) : rad;
+    for (let j = 0; j <= seg; j++) {
+      const a = j / seg * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const nn = [Nn[0] * c + B[0] * s, Nn[1] * c + B[1] * s, Nn[2] * c + B[2] * s];
+      g.v([path[i][0] + nn[0] * R, path[i][1] + nn[1] * R, path[i][2] + nn[2] * R], nn, [len, j / seg]);
+    }
+  }
+  const rows = closed ? n : n - 1;
+  for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) { const a = i * (seg + 1) + j, b = ((i + 1) % n) * (seg + 1) + j; g.q(a, b, b + 1, a + 1); }
+  return g.done();
+}
+const arcPts = (c, r, a0, a1, plane, k = 12) => { const o = []; for (let i = 0; i <= k; i++) { const a = a0 + (a1 - a0) * i / k; const u = Math.cos(a) * r, v = Math.sin(a) * r; o.push(plane === 'xz' ? [c[0] + u, c[1], c[2] + v] : plane === 'xy' ? [c[0] + u, c[1] + v, c[2]] : [c[0], c[1] + u, c[2] + v]); } return o; };
+const linePts = (a, b, k = 4) => { const o = []; for (let i = 0; i <= k; i++) o.push([a[0] + (b[0] - a[0]) * i / k, a[1] + (b[1] - a[1]) * i / k, a[2] + (b[2] - a[2]) * i / k]); return o; };
+const joinPts = (...ls) => { const o = []; for (const l of ls) for (const p of l) { const q = o[o.length - 1]; if (!q || Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) > 1e-4) o.push(p); } return o; };
+function cylinder(r, h, seg = 32, caps = true) { // along y, centered
+  const g = new GB();
+  for (const y of [-h / 2, h / 2]) for (let j = 0; j <= seg; j++) { const a = j / seg * Math.PI * 2; g.v([Math.cos(a) * r, y, Math.sin(a) * r], [Math.cos(a), 0, Math.sin(a)], [j / seg * Math.PI * 2 * r, y]); }
+  for (let j = 0; j < seg; j++) g.q(j, j + seg + 1, j + seg + 2, j + 1);
+  if (caps) for (const [y, ny] of [[-h / 2, -1], [h / 2, 1]]) { const c = g.v([0, y, 0], [0, ny, 0], [0, 0]); const b = g.P.length / 3; for (let j = 0; j <= seg; j++) { const a = j / seg * Math.PI * 2; g.v([Math.cos(a) * r, y, Math.sin(a) * r], [0, ny, 0], [Math.cos(a) * r, Math.sin(a) * r]); } for (let j = 0; j < seg; j++) g.I.push(c, b + j, b + j + 1); }
+  return g.done();
+}
+const rotXYZ = (m, f) => { const P = new Float32Array(m.P.length), N = new Float32Array(m.N.length); for (let i = 0; i < m.P.length; i += 3) { const a = f([m.P[i], m.P[i + 1], m.P[i + 2]]), b = f([m.N[i], m.N[i + 1], m.N[i + 2]]); P.set(a, i); N.set(b, i); } return { P, N, U: m.U, I: m.I }; };
+const yToZ = (v) => [v[0], v[2], -v[1]];
+const yToX = (v) => [v[1], -v[0], v[2]];
+function stadiumTube(L, Th, D, seg = 10) {
+  const g = new GB(), a = Th / 2, zc = D / 2 - a, ring = [];
+  for (let i = 0; i <= seg; i++) { const t = -Math.PI / 2 + Math.PI * i / seg; ring.push([Math.sin(t) * a, zc + Math.cos(t) * a, Math.sin(t), Math.cos(t)]); }
+  for (let i = 0; i <= seg; i++) { const t = Math.PI / 2 + Math.PI * i / seg; ring.push([Math.sin(t) * a, -zc + Math.cos(t) * a, Math.sin(t), Math.cos(t)]); }
+  ring.push(ring[0]);
+  for (const x of [-L / 2, L / 2]) for (const [y, z, ny, nz] of ring) g.v([x, y, z], [0, ny, nz], [x, 0]);
+  const m = ring.length; for (let i = 0; i < m - 1; i++) g.q(i, i + m, i + m + 1, i + 1);
+  return g.done();
+}
+function finRow(W, Fl, D, Fp) {
+  const g = new GB(), rc = Math.min(Fp / 2, Fl / 3), nw = Math.floor(W / Fp), y0 = -Fl / 2, y1 = Fl / 2, pts = [];
+  const x0 = -W / 2 + (W - (nw - 1) * Fp) / 2;
+  for (let i = 0; i < nw; i++) {
+    const x = x0 + i * Fp, upward = i % 2 === 0;
+    const ya = upward ? y0 + rc : y1 - rc, yb = upward ? y1 - rc : y0 + rc;
+    for (let k = 0; k <= 3; k++) { const y = ya + (yb - ya) * k / 3; pts.push([x, y, upward ? -1 : 1, 0, (y - y0) / Fl]); }
+    if (i < nw - 1) {
+      const cx = x + Fp / 2, cy = upward ? y1 - rc : y0 + rc;
+      for (let k = 1; k < 6; k++) { const t = Math.PI - Math.PI * k / 6; const s = upward ? 1 : -1; const nx = Math.cos(t), ny = Math.sin(t) * s; pts.push([cx + nx * Fp / 2, cy + ny * rc, nx, ny, -1]); }
+    }
+  }
+  for (const z of [-D / 2, D / 2]) for (const [x, y, nx, ny, u] of pts) g.v([x, y, z], [nx, ny, 0], [u, z]);
+  const m = pts.length; for (let i = 0; i < m - 1; i++) g.q(i, i + m, i + m + 1, i + 1);
+  return g.done();
+}
+function annulusPlate(w, h, R, thick, seg = 72) { // rectangle with circular hole, in xy, thickness along z
+  const g = new GB();
+  for (const [z, nz] of [[thick / 2, 1], [-thick / 2, -1]]) {
+    const b = g.P.length / 3;
+    for (let i = 0; i <= seg; i++) {
+      const a = i / seg * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : 1e9, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : 1e9);
+      g.v([c * R, s * R, z], [0, 0, nz], [0, 0]); g.v([c * k, s * k, z], [0, 0, nz], [1, 0]);
+    }
+    for (let i = 0; i < seg; i++) { const a = b + i * 2; g.q(a, a + 1, a + 3, a + 2); }
+  }
+  return g.done();
+}
+function bladeMesh(R, hub, nB) {
+  const g = new GB(), nr = 7, nc = 6;
+  for (let b = 0; b < nB; b++) {
+    const base = g.P.length / 3, a0 = b / nB * Math.PI * 2;
+    for (let i = 0; i <= nr; i++) for (let j = 0; j <= nc; j++) {
+      const r = hub + (R - hub) * i / nr, c = j / nc - 0.5;
+      const span = (0.62 - 0.18 * i / nr) * (1 + 0.25 * Math.sin(i / nr * Math.PI));
+      const pitch = 0.75 - 0.35 * i / nr;
+      const a = a0 + c * span + 0.25 * (i / nr) ** 2;
+      const z = -c * span * r * Math.tan(pitch) * 0.5 + 0.9 * (c * c - 0.25) * r * 0.08;
+      g.v([Math.cos(a) * r, Math.sin(a) * r, z], [0, 0, 1], [i / nr, j / nc]);
+    }
+    for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) { const a = base + i * (nc + 1) + j; g.q(a, a + nc + 1, a + nc + 2, a + 1); }
+  }
+  const m = g.done();
+  // recompute normals
+  const N = new Float32Array(m.P.length);
+  for (let t = 0; t < m.I.length; t += 3) { const [a, b, c] = [m.I[t] * 3, m.I[t + 1] * 3, m.I[t + 2] * 3]; const e1 = [m.P[b] - m.P[a], m.P[b + 1] - m.P[a + 1], m.P[b + 2] - m.P[a + 2]], e2 = [m.P[c] - m.P[a], m.P[c + 1] - m.P[a + 1], m.P[c + 2] - m.P[a + 2]]; const n = cross(e1, e2); for (const v of [a, b, c]) { N[v] += n[0]; N[v + 1] += n[1]; N[v + 2] += n[2]; } }
+  for (let i = 0; i < N.length; i += 3) { const n = nrm([N[i], N[i + 1], N[i + 2]]); N[i] = n[0]; N[i + 1] = n[1]; N[i + 2] = n[2]; }
+  m.N = N; return m;
+}
+
+</script>
+<script>// Cooling-loop 3D renderer: parametric parts built from GEO (layout.js), PBR shading with shadow map,
+// clear hoses with temperature-coloured coolant, flow ribbons at solved velocities, explode, cutaway, picking.
+function inv4(m) {
+  const o = new Float32Array(16), [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m;
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+  const b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06; if (!det) return o; det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det; o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det; o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det; o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det; o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+function lathe(profile, seg = 48, a0 = 0, a1 = Math.PI * 2) {
+  const g = new GB(), n = profile.length;
+  const nr = profile.map((p, i) => { const a = profile[Math.max(0, i - 1)], b = profile[Math.min(n - 1, i + 1)]; const dr = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dr, dy) || 1; return [dy / l, -dr / l]; });
+  let len = 0;
+  for (let i = 0; i < n; i++) {
+    if (i) len += Math.hypot(profile[i][0] - profile[i - 1][0], profile[i][1] - profile[i - 1][1]);
+    for (let j = 0; j <= seg; j++) { const a = a0 + (a1 - a0) * j / seg, c = Math.cos(a), s = Math.sin(a); g.v([profile[i][0] * c, profile[i][1], profile[i][0] * s], [nr[i][0] * c, nr[i][1], nr[i][0] * s], [len, j / seg]); }
+  }
+  for (let i = 0; i < n - 1; i++) for (let j = 0; j < seg; j++) { const a = i * (seg + 1) + j; g.q(a, a + seg + 1, a + seg + 2, a + 1); }
+  return g.done();
+}
+function barbProfile(L, ro, ri, ridges = 3) { // along +y from 0 to L
+  const p = [[ri, 0], [ro * 1.08, 0], [ro * 1.08, 4]];
+  const z0 = L * 0.42, step = (L - z0) / ridges;
+  p.push([ro, 4], [ro, z0]);
+  for (let k = 0; k < ridges; k++) { const y = z0 + k * step; p.push([ro, y], [ro * 1.13, y + step * 0.65], [ro * 0.94, y + step * 0.7]); }
+  p.push([ro * 0.9, L], [ri, L], [ri, 0]);
+  return p;
+}
+const xf = (m, f) => rotXYZ(m, f);
+const toX = (v) => [v[1], -v[0], v[2]];   // y-axis -> +x
+const toNX = (v) => [-v[1], v[0], v[2]];
+const toZ = (v) => [v[0], -v[2], v[1]];   // y-axis -> +z
+const toNY = (v) => [v[0], -v[1], -v[2]];
+const toNZ = (v) => [v[0], v[2], -v[1]];   // y-axis -> -z
+function along(m, dir) { // orient a +y mesh along unit dir
+  const d = nrm(dir); const up = [0, 1, 0];
+  let ax = cross(up, d); const s = Math.hypot(...ax), c = up[0] * d[0] + up[1] * d[1] + up[2] * d[2];
+  if (s < 1e-6) return c > 0 ? m : xf(m, toNY);
+  ax = ax.map((v) => v / s); const a = Math.atan2(s, c), ca = Math.cos(a), sa = Math.sin(a);
+  const R = (v) => { const k = ax, dt = k[0] * v[0] + k[1] * v[1] + k[2] * v[2], cr = cross(k, v); return [v[0] * ca + cr[0] * sa + k[0] * dt * (1 - ca), v[1] * ca + cr[1] * sa + k[1] * dt * (1 - ca), v[2] * ca + cr[2] * sa + k[2] * dt * (1 - ca)]; };
+  return xf(m, R);
+}
+function shroudLoft(w, h, R, z0, z1, n = 14, seg = 96) {
+  const g = new GB();
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, s = t * t * (3 - 2 * t), z = z0 + (z1 - z0) * t;
+    for (let j = 0; j <= seg; j++) {
+      const a = j / seg * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+      const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : 1e9, Math.abs(sn) > 1e-6 ? (h / 2) / Math.abs(sn) : 1e9);
+      const x = c * (k + (R - k) * s), y = sn * (k + (R - k) * s);
+      g.v([x, y, z], [c, sn, 0], [z, j / seg]);
+    }
+  }
+  for (let i = 0; i < n; i++) for (let j = 0; j < seg; j++) { const a = i * (seg + 1) + j; g.q(a, a + seg + 1, a + seg + 2, a + 1); }
+  const m = g.done();
+  // normals from geometry
+  const N = new Float32Array(m.P.length);
+  for (let t = 0; t < m.I.length; t += 3) { const [a, b, c] = [m.I[t] * 3, m.I[t + 1] * 3, m.I[t + 2] * 3]; const e1 = [m.P[b] - m.P[a], m.P[b + 1] - m.P[a + 1], m.P[b + 2] - m.P[a + 2]], e2 = [m.P[c] - m.P[a], m.P[c + 1] - m.P[a + 1], m.P[c + 2] - m.P[a + 2]]; const nn = cross(e1, e2); for (const v of [a, b, c]) { N[v] += nn[0]; N[v + 1] += nn[1]; N[v + 2] += nn[2]; } }
+  for (let i = 0; i < N.length; i += 3) { const q = nrm([N[i], N[i + 1], N[i + 2]]); N[i] = q[0]; N[i + 1] = q[1]; N[i + 2] = q[2]; }
+  m.N = N; return m;
+}
+const merge = (...parts) => { const g = new GB(); for (const [m, o] of parts) g.add(m, o || [0, 0, 0]); return g.done(); };
+const ringMesh = (c, R, rt, plane) => sweep(arcPts(c, R, 0, Math.PI * 2, plane, 48), rt, 10, true);
+
+const LRAMP = `
+vec3 ramp(float t){ t=clamp(t,0.,1.);
+ vec3 c0=vec3(.11,.23,.62),c1=vec3(.16,.58,.86),c2=vec3(.55,.88,.82),c3=vec3(.98,.88,.45),c4=vec3(.96,.55,.2),c5=vec3(.86,.13,.2);
+ float s=t*5.; if(s<1.)return mix(c0,c1,s); if(s<2.)return mix(c1,c2,s-1.); if(s<3.)return mix(c2,c3,s-2.); if(s<4.)return mix(c3,c4,s-3.); return mix(c4,c5,s-4.);}
+vec3 lin(vec3 c){ return pow(c,vec3(2.2)); }`;
+const LVS = `#version 300 es
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec2 aUV; layout(location=3) in vec3 iOff; layout(location=4) in vec4 iA;
+uniform mat4 uVP; uniform mat4 uModel; out vec3 vW; out vec3 vN; out vec2 vUV; out vec4 vA; out vec3 vL;
+void main(){ vec4 w=uModel*vec4(aPos+iOff,1.); vN=mat3(uModel)*aNrm; vW=w.xyz; vUV=aUV; vA=iA; vL=aPos; gl_Position=uVP*w; }`;
+const LFS_DEPTH = `#version 300 es
+precision mediump float; out vec4 o; void main(){ o=vec4(1.); }`;
+const LFS_PICK = `#version 300 es
+precision mediump float; uniform vec3 uPickC; uniform float uCutZ; uniform int uCutOn; in vec3 vW; out vec4 o; void main(){ if(uCutOn==1&&vW.z>uCutZ) discard; o=vec4(uPickC,1.); }`;
+const LFS = `#version 300 es
+precision highp float; precision highp sampler2DShadow;
+in vec3 vW; in vec3 vN; in vec2 vUV; in vec4 vA; in vec3 vL; out vec4 o;
+uniform vec3 uCam; uniform int uKind; uniform float uThermal; uniform float uTlo; uniform float uThi; uniform float uTa; uniform float uTb; uniform float uLen;
+uniform float uRW; uniform float uRD; uniform float uLp; uniform float uTheta; uniform vec3 uRC;
+uniform int uCutOn; uniform float uCutZ; uniform float uAlpha; uniform int uSel; uniform float uTime; uniform int uHDR; uniform int uUseAO; uniform vec2 uScreen; uniform float uFade;
+uniform sampler2DShadow uShadow; uniform mat4 uLightVP; uniform vec3 uLdir; uniform sampler2D uTemp; uniform vec2 uTempSize; uniform sampler2D uAO;
+${LRAMP}
+const float PI=3.14159265;
+vec3 env(vec3 d){
+ float y=d.y; vec3 c=mix(vec3(.018,.021,.027),vec3(.06,.07,.085),smoothstep(-.1,.7,y));
+ c+=vec3(2.6,2.55,2.45)*smoothstep(.80,.93,y);
+ c+=vec3(2.8,2.5,2.1)*smoothstep(.93,.99,dot(d,normalize(vec3(.75,.35,.55))));
+ c+=vec3(1.1,1.4,2.0)*smoothstep(.90,.985,dot(d,normalize(vec3(-.8,.25,-.55))));
+ c+=vec3(.6,.62,.66)*smoothstep(.94,.995,dot(d,normalize(vec3(-.6,.15,.8))));
+ c+=vec3(.9,.9,.95)*smoothstep(.985,.999,dot(d,normalize(vec3(.1,.2,1.))));
+ c+=vec3(.12,.14,.17)*exp(-abs(y)*10.);
+ if(y<0.) c=mix(c,vec3(.012,.014,.017),smoothstep(0.,-.12,y));
+ return c; }
+vec3 envR(vec3 d,float r){ vec3 a=mix(vec3(.03,.035,.042),vec3(.5,.52,.55),clamp(d.y*.6+.25,0.,1.)); return mix(env(d),a,clamp(r*r*1.8,0.,1.)); }
+float D_GGX(float nh,float a){ float a2=a*a; float d=nh*nh*(a2-1.)+1.; return a2/(PI*d*d); }
+float G_S(float nv,float nl,float r){ float k=(r+1.)*(r+1.)/8.; return nv/(nv*(1.-k)+k)*nl/(nl*(1.-k)+k); }
+vec3 bump(vec3 n,float h,float s){ vec3 dx=dFdx(vW),dy=dFdy(vW); float hx=dFdx(h),hy=dFdy(h); vec3 r1=cross(dy,n),r2=cross(n,dx); float det=dot(dx,r1); if(abs(det)<1e-9) return n; vec3 g=sign(det)*(hx*r1+hy*r2); return normalize(abs(det)*n-g*s); }
+float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y); }
+float shadowAt(vec3 w,vec3 n){
+ vec4 l=uLightVP*vec4(w+n*1.2,1.); vec3 p=l.xyz/l.w*.5+.5; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) return 1.;
+ float s=0.; vec2 t=vec2(1./2048.);
+ for(int i=-2;i<=2;i++) for(int j=-2;j<=2;j++) s+=texture(uShadow,vec3(p.xy+vec2(i,j)*t*1.1,p.z-.0012));
+ return s/25.; }
+vec3 light(vec3 base,float metal,float rough,vec3 n,vec3 v,float sh,float ao){
+ vec3 F0=mix(vec3(.04),base,metal); vec3 dif=base*(1.-metal); float nv=max(dot(n,v),1e-3); vec3 col=vec3(0.);
+ vec3 Ls[3]; vec3 Cs[3]; Ls[0]=uLdir; Cs[0]=vec3(3.3,3.05,2.8)*sh; Ls[1]=normalize(vec3(-.7,.3,-.5)); Cs[1]=vec3(.6,.75,1.1)*1.2; Ls[2]=normalize(vec3(-.5,.4,.8)); Cs[2]=vec3(.4,.42,.45);
+ for(int i=0;i<3;i++){ vec3 L=Ls[i]; float nl=max(dot(n,L),0.); if(nl<=0.) continue; vec3 h=normalize(L+v); float nh=max(dot(n,h),0.);
+  float a=max(.03,rough*rough); vec3 F=F0+(1.-F0)*pow(1.-max(dot(h,v),0.),5.);
+  col+=(dif*(1.-F)/PI+min(D_GGX(nh,a)*G_S(nv,nl,rough)/(4.*nv*nl+1e-3),6.)*F)*Cs[i]*nl*(i==0?1.:mix(.4,1.,ao)); }
+ vec3 Fr=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.);
+ col+=(dif*mix(vec3(.05,.055,.065),vec3(.3,.32,.36),n.y*.5+.5)*.9+envR(reflect(-v,n),rough)*Fr)*ao;
+ return col; }
+float tnorm(float T){ return (T-uTlo)/max(.1,uThi-uTlo); }
+vec3 outc(vec3 c){ if(uHDR==1) return c; c=(c*(2.51*c+.03))/(c*(2.43*c+.59)+.14); return pow(clamp(c,0.,1.),vec3(1./2.2)); }
+void main(){
+ if(uCutOn==1&&vW.z>uCutZ) discard;
+ vec3 n=normalize(vN); vec3 v=normalize(uCam-vW); if(dot(n,v)<0.) n=-n;
+ float alpha=uAlpha; float sao=uUseAO==1?texture(uAO,gl_FragCoord.xy/uScreen).r:1.;
+ if(uKind==3){ float r=length(vW.xz-vec2(40.,0.))/1700.; vec3 c=mix(vec3(.011,.013,.017),vec3(.0045,.0055,.0075),smoothstep(0.,.75,r));
+  float sh=shadowAt(vW,vec3(0,1,0)); c*=(.3+.7*sh)*mix(1.,sao,.9);
+  float sp=pow(max(0.,1.-r*1.6),3.)*.02; c+=sp*vec3(.8,.85,1.);
+  c=mix(c,vec3(.0045,.0055,.0075),smoothstep(.35,.95,r)); o=vec4(outc(c),1.); return; }
+ vec3 base=vec3(.8,.82,.84); float metal=1., rough=.32, ao=1.; vec3 emit=vec3(0.); float tn=-1.;
+ if(uKind==0){ float s=vnoise(vW.xy*.05)*.6+vnoise(vW.zy*.05)*.4; n=bump(n,vnoise(vW.xz*vec2(.3,.3)+vW.y*.02)*.01,.2); base=vec3(.74,.76,.79)*(.96+.05*s); rough=.28+.08*s; }
+ if(uKind==1||uKind==2){
+  vec2 tc=vec2(((vW.x-uRC.x+uRW*.5)/uRW*(uTempSize.x-1.)+.5)/uTempSize.x,(vA.z+.5)/uTempSize.y); vec4 tt=texture(uTemp,tc);
+  if(uKind==1){ tn=tt.b; base=vec3(.74,.76,.79); rough=.28; }
+  else { float zf=clamp((uRD*.5-(vW.z-uRC.z))/uRD,0.,1.); float dm=zf*uRD; float u=vUV.x;
+   float nL=floor((uRD-3.4*uLp)/uLp*.5); float e=uLp, b1=e+nL*uLp, t0=b1+1.4*uLp, b2=t0+nL*uLp; float sgn=0.; if(dm>e&&dm<b1) sgn=1.; else if(dm>t0&&dm<b2) sgn=-1.;
+   float ph=dm/uLp; float detail=1.-smoothstep(.18,.45,fwidth(ph));
+   if(u>=0.&&sgn!=0.&&u>.08&&u<.92){ float s=fract(ph); float edge=min(s,1.-s); float aw=fwidth(ph)*1.2+.005; float m=smoothstep(.05,.05+aw,edge);
+    if(u>.12&&u<.88&&uThermal<.5) alpha=mix(1.,m,detail);
+    n=normalize(mix(n,normalize(n+vec3(0.,0.,sin(radians(uTheta)*sgn)*sign(n.x+1e-4))*1.2),detail)); ao=mix(1.,.55+.45*smoothstep(0.,.18,edge),detail); }
+   if(u<0.) ao=.8; float ed=min(zf,1.-zf); ao*=mix(1.,.38,smoothstep(.0,.16,ed));
+   float mid=u<0.?0.:1.-abs(2.*u-1.); tn=mix(tt.r,mix(tt.g*.55,tt.g,zf),mid*.55);
+   float var=hash(vec2(floor((vW.x+500.)/max(.3,uLp*1.2)),vA.z)); base=vec3(.86,.87,.89)*(.9+.14*var); rough=.34+.1*var; metal=.6; }
+ }
+ if(uKind==4){ base=vec3(.03,.031,.034); metal=0.; rough=.55; }
+ if(uKind==5){ base=vec3(.72,.04,.06); metal=.85; rough=.26; n=bump(n,smoothstep(.3,.7,abs(fract(vUV.x*.9)-.5)*2.)*.25,.5); }
+ if(uKind==6){ base=vec3(.04,.042,.046); metal=0.; rough=.42; n=bump(n,vnoise(vW.xy*1.5+vW.z)*.03,.4); }
+ if(uKind==7){ float ph=fract(vUV.x/1.35); n=bump(n,pow(ph,1.6)*.6,.9); base=vec3(.84,.85,.87); rough=.16; vec3 tint=mix(vec3(1.),vec3(1.,.9,.75),.25); base*=tint; }
+ if(uKind==8){ base=vec3(.66,.67,.69); rough=.2; n=bump(n,vnoise(vW.xy*vec2(.5,30.))*.04,.4); }
+ if(uKind==9){ base=vec3(.07,.075,.08); metal=0.; rough=.75; }
+ if(uKind==10){ float T=mix(uTa,uTb,clamp(vUV.x/max(1.,uLen),0.,1.)); vec3 c=lin(ramp(tnorm(T))); base=c*.8; metal=0.; rough=.25; emit=c*.32; }
+ if(uKind==11){ base=vec3(.92,.96,1.); metal=0.; rough=.05; }
+ if(uKind==12){ base=vec3(.022,.024,.027); metal=.35; rough=.48; if(uFade>0.) alpha*=smoothstep(0.,130.,vUV.x)*smoothstep(uLen,uLen-130.,vUV.x); }
+ if(uKind==13){ base=vec3(.045,.05,.058); metal=.75; rough=.36; float g=abs(fract(vL.x/7.)-.5); float rib=step(.92,abs(vN.y))*smoothstep(.36,.46,g); n=bump(n,rib*.5,.5); base*=1.+.15*vnoise(vW.xz*.05); }
+ if(uKind==14){ base=vec3(.58,.6,.63); metal=.95; rough=.22; float ang=atan(vL.y,vL.x); n=bump(n,(sin(vL.z*1.9)*.5+.5)*step(.5,1.-abs(vN.z))*.35,.6); }
+ if(uKind==15){ base=vec3(.78,.22,.03); metal=0.; rough=.42; }
+ if(uKind==16){ base=vec3(.045,.047,.052); metal=0.; rough=.6; n=bump(n,smoothstep(.2,.5,abs(fract(vW.y/.25)-.5))*.12,.6); }
+ if(uKind==17){ base=vec3(1.,.15,.2); metal=0.; rough=.4; emit=vec3(.9,.06,.1)*(.5+.4*sin(uTime*4.)); }
+ if(uKind==18){ // EMRAX face: 10 triangular windows between spokes, copper coils visible behind
+  float r=length(vL.xy), a=atan(vL.y,vL.x); float s=fract(a/(6.2831853)*10.); float r0=44., r1=98.;
+  float w=mix(.05,.40,clamp((r-r0)/(r1-r0),0.,1.));
+  if(r>r0&&r<r1&&abs(s-.5)<w) discard;
+  base=vec3(.6,.62,.65); metal=.95; rough=.24; float ring=step(r1,r)*step(r,r1+4.)+step(r0-4.,r)*step(r,r0);
+  n=bump(n,sin(r*1.1)*.05*step(r1+4.,r),.4); base*=1.-.25*ring; }
+ if(uKind==19){ float a=atan(vL.y,vL.x); base=vec3(.78,.42,.22); metal=1.; rough=.3; n=bump(n,smoothstep(.2,.8,abs(fract(a*48./6.2831853)-.5)*2.)*.6,.8); ao*=.75; }
+ if(uKind==21){ base=vec3(.75,.77,.8); metal=.2; rough=.4; float l=step(.55,fract(vL.x/4.))*step(abs(vL.y-vL.y),1.); base*=.9+.1*l; }
+ if(uKind==22){ base=vec3(.92,.93,.95); metal=1.; rough=.07; }
+ if(uKind==23){ base=vec3(.95,.78,.08); metal=0.; rough=.45; }
+ if(uKind==24){ base=vec3(.12,.32,.85); metal=.85; rough=.28; }
+ if(uKind==25){ base=vec3(.6,.05,.05); metal=0.; rough=.45; }
+ if(uKind==26){ base=vec3(.35,.62,.95); metal=0.; rough=.1; emit=vec3(.05,.12,.25); }
+ if(uKind==27){ base=vec3(.30,.31,.33); metal=0.; rough=.5; }
+ if(uThermal>.5&&tn>=0.){ vec3 tcol=lin(ramp(tn)); base=tcol; metal=.25; rough=.4; emit=tcol*.22; }
+ if(alpha>.99&&uKind!=11&&uKind!=10&&uKind!=26) ao*=mix(1.,sao,.92);
+ float sh=shadowAt(vW,n);
+ vec3 col=light(base,metal,rough,n,v,sh,ao)+emit;
+ if(uKind==11){ float f=pow(1.-max(dot(n,v),0.),4.); alpha=uAlpha*(.05+.5*f); }
+ if(uSel==1){ col+=vec3(.35,.16,.05)*(.6+.4*sin(uTime*5.)); }
+ if(any(isnan(col))||any(isinf(col))) col=vec3(0.); col=min(col,vec3(40.));
+ o=vec4(outc(col),alpha);
+}`;
+const LVS_RIB = `#version 300 es
+layout(location=0) in vec3 aP; layout(location=1) in vec3 aQ; layout(location=2) in vec3 aS;
+uniform mat4 uVP; uniform vec2 uRes; uniform float uWid; uniform float uTlo; uniform float uThi; out vec4 vC; out float vE;
+${LRAMP}
+void main(){ vec4 p=uVP*vec4(aP,1.), q=uVP*vec4(aQ,1.); vec2 a=p.xy/p.w*uRes, b=q.xy/q.w*uRes; vec2 d=b-a; float l=length(d); d=l>1e-4?d/l:vec2(1.,0.);
+ p.xy+=vec2(-d.y,d.x)*aS.x*uWid*(.4+.6*aS.z)/uRes*p.w; gl_Position=p; vE=aS.x; vC=vec4(ramp((aS.y-uTlo)/max(.1,uThi-uTlo)),aS.z); }`;
+const LFS_RIB = `#version 300 es
+precision mediump float; in vec4 vC; in float vE; out vec4 o; uniform int uHDR;
+void main(){ float e=1.-abs(vE); float a=vC.a*smoothstep(0.,.7,e); vec3 c=mix(vC.rgb,vec3(1.),.25*e)*(1.+.5*e); if(uHDR==1) c=pow(c,vec3(2.2))*2.2; o=vec4(c*a,a); }`;
+// ---- post-processing ----
+const PVS = `#version 300 es
+out vec2 vUV; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUV=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
+const PFS_G = `#version 300 es
+precision highp float; in vec3 vW; in vec3 vN; uniform mat4 uV; uniform int uCutOn; uniform float uCutZ; out vec4 o;
+void main(){ if(uCutOn==1&&vW.z>uCutZ) discard; vec3 n=normalize(mat3(uV)*normalize(vN)); if(n.z<0.) n=-n; o=vec4(n*.5+.5,1.); }`;
+const PFS_SSAO = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uD; uniform sampler2D uN; uniform mat4 uP; uniform mat4 uIP; uniform vec3 uK[16]; uniform float uRad;
+vec3 vpos(vec2 uv){ float d=texture(uD,uv).r; vec4 p=uIP*vec4(uv*2.-1.,d*2.-1.,1.); return p.xyz/p.w; }
+float h(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+void main(){ float d=texture(uD,vUV).r; if(d>=.99999){ o=vec4(1.); return; }
+ vec3 P=vpos(vUV); vec3 N=normalize(texture(uN,vUV).xyz*2.-1.);
+ float ang=h(gl_FragCoord.xy)*6.2831853; vec3 r=vec3(cos(ang),sin(ang),0.);
+ vec3 T=normalize(r-N*dot(r,N)); vec3 B=cross(N,T); mat3 TBN=mat3(T,B,N);
+ float rad=uRad*clamp(-P.z/1800.,.35,2.5); float occ=0.;
+ for(int i=0;i<16;i++){ vec3 S=P+TBN*uK[i]*rad; vec4 q=uP*vec4(S,1.); vec2 su=q.xy/q.w*.5+.5; if(su.x<0.||su.x>1.||su.y<0.||su.y>1.) continue;
+  float sz=vpos(su).z; float rc=smoothstep(0.,1.,rad/max(1e-3,abs(P.z-sz))); occ+=(sz>=S.z+rad*.04?1.:0.)*rc; }
+ o=vec4(vec3(pow(1.-occ/16.,1.6)),1.); }`;
+const PFS_BLUR_AO = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uA; uniform sampler2D uD; uniform vec2 uTx;
+void main(){ float d0=texture(uD,vUV).r; float s=0.,w=0.; for(int i=-2;i<=2;i++) for(int j=-2;j<=2;j++){ vec2 uv=vUV+vec2(i,j)*uTx; float d=texture(uD,uv).r; float wt=exp(-abs(d-d0)*4000.); s+=texture(uA,uv).r*wt; w+=wt; } o=vec4(vec3(s/max(w,1e-4)),1.); }`;
+const PFS_BRIGHT = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uC; uniform vec2 uTx;
+void main(){ vec3 c=vec3(0.); for(int i=0;i<2;i++) for(int j=0;j<2;j++) c+=texture(uC,vUV+(vec2(i,j)-.5)*uTx).rgb; c*=.25; if(any(isnan(c))) c=vec3(0.); float l=dot(c,vec3(.3,.59,.11)); o=vec4(min(c*smoothstep(1.4,4.,l),vec3(8.)),1.); }`;
+const PFS_BLUR = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uC; uniform vec2 uDir;
+void main(){ float w[5]=float[](.227,.1945,.1216,.054,.0162); vec3 c=texture(uC,vUV).rgb*w[0]; for(int i=1;i<5;i++){ c+=texture(uC,vUV+uDir*float(i)).rgb*w[i]; c+=texture(uC,vUV-uDir*float(i)).rgb*w[i]; } o=vec4(c,1.); }`;
+const PFS_COMP = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uC; uniform sampler2D uB; uniform float uExp; uniform vec2 uRes;
+vec3 aces(vec3 c){ return clamp((c*(2.51*c+.03))/(c*(2.43*c+.59)+.14),0.,1.); }
+void main(){ vec3 c=texture(uC,vUV).rgb; if(any(isnan(c))) c=vec3(0.); vec3 bl=texture(uB,vUV).rgb; if(any(isnan(bl))) bl=vec3(0.); c+=bl*.4; c=aces(c*uExp);
+ vec2 q=vUV-.5; float vig=1.-dot(q,q)*.55; c*=vig; c=pow(c,vec3(1./2.2));
+ c+= (fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)-.5)/255.;
+ o=vec4(c,1.); }`;
+const PFS_BACK = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform int uHDR;
+void main(){ vec2 q=vUV-vec2(.5,.62); float r=length(q*vec2(1.,1.25)); vec3 c=mix(vec3(.016,.02,.027),vec3(.0045,.0055,.0075),smoothstep(0.,.75,r)); if(uHDR==0) c=pow(c,vec3(1./2.2)); o=vec4(c,1.); }`;
+
+class LoopRenderer {
+  constructor(canvas, labelsEl) {
+    this.cv = canvas; this.labelsEl = labelsEl;
+    const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+    if (!gl) { this.ok = false; return; }
+    this.ok = true; this.gl = gl;
+    this.prog = this.mk(LVS, LFS); this.dprog = this.mk(LVS, LFS_DEPTH); this.pprog = this.mk(LVS, LFS_PICK); this.rprog = this.mk(LVS_RIB, LFS_RIB);
+    this.SM = 2048;
+    this.shTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, this.SM, this.SM);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE], [gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    this.shFB = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, this.shFB); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shTex, 0); gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.tTex = gl.createTexture(); this.instBuf = gl.createBuffer(); this.ribBuf = gl.createBuffer();
+    this.hdr = !!gl.getExtension('EXT_color_buffer_float'); gl.getExtension('OES_texture_float_linear');
+    this.gprog = this.mk(LVS, PFS_G); this.backProg = this.mk(PVS, PFS_BACK);
+    if (this.hdr) { this.ssaoProg = this.mk(PVS, PFS_SSAO); this.aoBlurProg = this.mk(PVS, PFS_BLUR_AO); this.brightProg = this.mk(PVS, PFS_BRIGHT); this.blurProg = this.mk(PVS, PFS_BLUR); this.compProg = this.mk(PVS, PFS_COMP); }
+    this.fsVAO = gl.createVertexArray();
+    this.kernel = new Float32Array(48); for (let i = 0; i < 16; i++) { const a = i * 2.399963, z = 0.15 + 0.85 * ((i + 0.5) / 16), r = Math.sqrt(1 - z * z), sc = 0.2 + 0.8 * ((i + 1) / 16) ** 2; this.kernel.set([Math.cos(a) * r * sc, Math.sin(a) * r * sc, z * sc], i * 3); }
+    this.samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
+    this.tg = null;
+    this.yaw = -0.6; this.pitch = 0.22; this.zoom = 1; this.autoSpin = true; this.pan = [0, 0];
+    this.thermal = 1; this.cut = false; this.flow = true; this.explode = 0; this.sel = null; this.t = 0; this.fanAng = 0;
+    this.Ldir = nrm([0.42, 0.88, 0.5]);
+    this.bindInput();
+  }
+  mk(vs, fs) {
+    const gl = this.gl, sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    p.u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); p.u[a.name] = gl.getUniformLocation(p, a.name); }
+    return p;
+  }
+  up(m) { const gl = this.gl, mk = (d, t = gl.ARRAY_BUFFER) => { const b = gl.createBuffer(); gl.bindBuffer(t, b); gl.bufferData(t, d, gl.STATIC_DRAW); return b; }; return { p: mk(m.P), n: mk(m.N), u: mk(m.U), i: mk(m.I, gl.ELEMENT_ARRAY_BUFFER), count: m.I.length }; }
+  free(o) { if (!o) return; for (const k of ['p', 'n', 'u', 'i']) this.gl.deleteBuffer(o[k]); }
+  bindInput() {
+    const cv = this.cv, ptrs = new Map(); let pinch = 0, moved = 0, down = null;
+    cv.addEventListener('pointerdown', (e) => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); cv.setPointerCapture(e.pointerId); moved = 0; down = [e.clientX, e.clientY]; });
+    cv.addEventListener('pointermove', (e) => {
+      if (!ptrs.has(e.pointerId)) return;
+      const p = ptrs.get(e.pointerId), dx = e.clientX - p[0], dy = e.clientY - p[1]; ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 4 && this.autoSpin) { this.autoSpin = false; this.onSpin && this.onSpin(false); }
+      if (ptrs.size === 1) { if (e.shiftKey || e.buttons === 4) { this.pan[0] -= dx * this.zoom * 1.2; this.pan[1] += dy * this.zoom * 1.2; } else { this.yaw -= dx * 0.007; if (e.pointerType !== 'touch') this.pitch = Math.max(-0.1, Math.min(1.35, this.pitch + dy * 0.005)); } }
+      else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) this.zoom = Math.max(0.25, Math.min(2, this.zoom * pinch / d)); pinch = d; }
+    });
+    const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; if (moved < 6 && down && e.type === 'pointerup') this.pickAt(e.clientX, e.clientY); down = null; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.25, Math.min(2, this.zoom * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+    cv.addEventListener('dblclick', () => { this.yaw = -0.6; this.pitch = 0.22; this.zoom = 1; this.pan = [0, 0]; this.focus('loop'); this.onFocus && this.onFocus('loop'); });
+  }
+  // ---------- build the assembly ----------
+  build(runs, hoseDims, radR) {
+    const g = GEO; this.runs = runs;
+    if (this.items) for (const it of this.items) if (it.own) this.free(it.mesh);
+    const items = this.items = []; let pid = 0; this.parts = {};
+    const add = (part, mesh, kind, o = {}) => {
+      if (!this.parts[part]) this.parts[part] = { pid: ++pid, ex: o.ex || [0, 0, 0] };
+      const it = { part, mesh: this.up(mesh), own: true, kind, ex: this.parts[part].ex, cut: !!o.cut, glass: !!o.glass || !!o.fade, alpha: o.alpha ?? 1, len: o.len || 1, inst: o.inst, hose: o.hose, spin: o.spin, center: o.center, ghost: !!o.ghost, coolant: !!o.coolant, fade: !!o.fade };
+      items.push(it); return it;
+    };
+    const F = g.frame, P = ports();
+    const hexNut = (r, h) => cylinder(r, h, 6);
+    const wire = (part, pts, r, kind) => add(part, sweep(catmull(pts, 4), r, 10), kind);
+    const ring = (c, R, rt, plane) => ringMesh(c, R, rt, plane);
+    // ================= swirl pot V3 =================
+    const sp = g.pot, B = sp.base, exPot = [0, 140, 0];
+    const bp = barbProfile(sp.nipL, sp.nipRo, sp.outRi, 4).map(([r, y]) => [r, B - sp.cone - y]).reverse();
+    add('pot', lathe(bp, 48), 0, { ex: exPot, cut: true });
+    add('pot', lathe([[sp.nipRo, B - sp.cone], [sp.ro, B], [sp.ro, B + sp.body]], 72), 0, { cut: true });
+    add('pot', lathe([[sp.ri, B + sp.body], [sp.ri, B], [sp.outRi, B - sp.cone]], 72), 0, { cut: true });
+    add('pot', lathe([[sp.outRi, B - sp.cone], [sp.nipRo, B - sp.cone]], 48), 0, { cut: true });
+    const top = B + sp.body;
+    add('pot', lathe([[sp.open / 2, top + sp.capT], [sp.capD / 2 - 1, top + sp.capT], [sp.capD / 2, top + sp.capT - 1], [sp.capD / 2, top], [sp.ri, top]], 72), 0, { cut: true });
+    const zI = sp.inletZ, x0 = Math.sqrt(Math.max(0, sp.ri * sp.ri - zI * zI)) - 2, yI = B + sp.inletY;
+    add('pot', sweep(linePts([x0, yI, zI], [sp.inletEnd[0] - 30, yI, zI], 4), sp.tubeRo, 32), 0, { cut: true });
+    add('pot', sweep(linePts([x0, yI, zI], [sp.inletEnd[0] - 30, yI, zI], 4), sp.tubeRo - sp.wall, 32), 0, { cut: true });
+    add('pot', along(lathe(barbProfile(30, sp.tubeRo, sp.tubeRo - sp.wall, 3), 32), [1, 0, 0]), 0, { center: [sp.inletEnd[0] - 30, yI, zI] });
+    // filler neck welded into the 1.0" opening, chrome pressure cap with ears and warning label, overflow nipple
+    const nb = top + sp.capT, nr = sp.open / 2;
+    add('pot', lathe([[nr - 1.2, nb - 2], [nr, nb - 2], [nr, nb + 18], [nr + 3, nb + 19], [nr + 7, nb + 19], [nr + 7.5, nb + 21], [nr - 1.2, nb + 21]], 56), 8, { cut: true });
+    add('pot', lathe([[0, nb + 32], [17, nb + 31], [21.5, nb + 29.5], [22.5, nb + 26], [22.5, nb + 21.5], [12, nb + 21.5]], 72), 22);
+    add('pot', merge([roundedBox(9, 6, 13, 2, 2), [24, nb + 25, 0]], [roundedBox(9, 6, 13, 2, 2), [-24, nb + 25, 0]]), 22);
+    add('pot', merge([cylinder(13, 0.8, 48), [0, nb + 32.2, 0]]), 23);
+    add('pot', merge([cylinder(4, 3, 24), [0, nb + 33.6, 0]]), 22);
+    this.overflowNip = [nr + 18, nb + 10, 0];
+    add('pot', sweep(linePts([nr - 1, nb + 10, 0], this.overflowNip, 3), 3.2, 16), 8);
+    add('pot', sweep(arcPts([this.overflowNip[0] - 3, nb + 10, 0], 3.7, 0, Math.PI * 2, 'yz', 18), 0.8, 6, true), 8);
+    // TIG welds
+    add('pot', ring([0, top + 0.6, 0], sp.ro + 0.5, 1.25, 'xz'), 7);
+    add('pot', ring([0, nb + 0.4, 0], nr + 0.6, 1.05, 'xz'), 7);
+    add('pot', ring([0, B - sp.cone - 0.3, 0], sp.nipRo + 0.4, 1.05, 'xz'), 7);
+    add('pot', ring([Math.sqrt(Math.max(0, sp.ro * sp.ro - zI * zI)) + 1.5, yI, zI], sp.tubeRo + 0.4, 1.15, 'yz'), 7);
+    // stainless band clamp + rubber liner + tab
+    add('pot', ring([0, B + 38, 0], sp.ro + 2.6, 1.9, 'xz'), 8);
+    add('pot', ring([0, B + 38, 0], sp.ro + 0.9, 1.0, 'xz'), 9);
+    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb) - sp.ro - 6, 1.5, 2), [0, B + 38, (F.zb - sp.ro - 4) / 2]]), 12);
+    // ================= pump: Davies Craig EBP40 (envelope approximate) =================
+    const pc = g.pump.c, exP = [120, 110, 120];
+    add('pump', merge([lathe([[0, -70], [26, -70], [30, -66], [31, -60], [31, 6], [33, 8], [33, 10], [0, 10]], 56), pc]), 6, { ex: exP });
+    { const rib = new GB(); for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; rib.add(roundedBox(3, 40, 3, 1, 1), [pc[0] + Math.cos(a) * 31.5, pc[1] - 40, pc[2] + Math.sin(a) * 31.5]); } add('pump', rib.done(), 6); }
+    add('pump', merge([lathe([[0, 10], [41, 10], [43, 13], [43, 40], [40, 44], [12, 46], [10, 46]], 64), pc]), 6);
+    add('pump', merge([roundedBox(26, 30, 30, 8, 3), [pc[0] + 30, pc[1] + 27, pc[2] + 22]]), 6);
+    add('pump', merge([cylinder(31.8, 6, 56), [pc[0], pc[1] - 18, 0]]), 23);
+    add('pump', merge([lathe(barbProfile(36, 9.5, 7.9, 3), 32), [pc[0], pc[1] + 46, 0]]), 6);
+    add('pump', along(lathe(barbProfile(40, 9.5, 7.9, 3), 32), [1, 0, 0]), 6, { center: [pc[0] + 40, pc[1] + 27, 0] });
+    add('pump', merge([roundedBox(14, 18, 12, 3, 2), [pc[0], pc[1] - 74, pc[2] - 14]]), 27);
+    wire('pump', [[pc[0] - 3, pc[1] - 80, pc[2] - 16], [pc[0] - 6, pc[1] - 110, pc[2] - 70], [pc[0] - 40, pc[1] - 120, F.zb + 16]], 1.6, 25);
+    wire('pump', [[pc[0] + 3, pc[1] - 80, pc[2] - 16], [pc[0] + 2, pc[1] - 112, pc[2] - 72], [pc[0] - 34, pc[1] - 124, F.zb + 16]], 1.6, 4);
+    add('pump', ring([pc[0], pc[1] - 30, 0], 33.5, 1.8, 'xz'), 8);
+    add('mounts', merge([roundedBox(25.4, 18, Math.abs(F.zb) - 36, 1.5, 2), [pc[0], pc[1] - 30, (F.zb - 36) / 2]]), 12);
+    // ================= Y fittings (billet aluminium) =================
+    const yfit = (c, flip, part, ex) => {
+      const sgn = flip ? -1 : 1, legs = [[[0, 46 * sgn, 0], 9.5, 7.9, 12], [[-31, -44 * sgn, 0], 0.4375 / 2 * 25.4, 4.2, 9], [[31, -44 * sgn, 0], 0.5625 / 2 * 25.4, 5.6, 10.5]];
+      const body = new GB();
+      body.add(roundedBox(30, 30, 38.1, 9, 5), [0, 0, 0]);
+      for (const [to, ro, ri, rArm] of legs) {
+        const d = nrm(to), L = Math.hypot(to[0], to[1]);
+        body.add(sweep(linePts([0, 0, 0], [d[0] * L * 0.5, d[1] * L * 0.5, 0], 2), rArm, 32), [0, 0, 0]);
+        body.add(along(hexNut(rArm + 2.5, 7), d), [d[0] * L * 0.52, d[1] * L * 0.52, 0]);
+      }
+      add(part, merge([body.done(), c]), 0, { ex, cut: true });
+      const bb = new GB();
+      for (const [to, ro, ri] of legs) { const d = nrm(to), L = Math.hypot(to[0], to[1]) * 0.46; bb.add(along(lathe(barbProfile(L, ro, ri, 3), 32), d), [c[0] + to[0] - d[0] * L, c[1] + to[1] - d[1] * L, c[2]]); }
+      add(part, bb.done(), 8);
+    };
+    yfit(g.ySplit.c, false, 'ysplit', [0, 60, 170]);
+    yfit(g.yMerge.c, true, 'ymerge', [0, -40, 170]);
+    // ================= EMRAX 228 =================
+    const mc = g.motor.c, mR = g.motor.D / 2, mL = g.motor.L, exM = [-200, 0, 140];
+    const rim = []; rim.push([mR - 10, -mL / 2]); for (let k = 0; k <= 12; k++) { const y = -mL / 2 + 6 + k * (mL - 12) / 12; rim.push([k % 2 ? mR - 2.2 : mR, y]); } rim.push([mR - 6, mL / 2 - 1], [mR - 12, mL / 2]);
+    add('motor', xf(lathe(rim, 128), toZ), 14, { ex: exM, center: mc });
+    add('motor', xf(lathe([[36, mL / 2 - 4], [mR - 10, mL / 2 - 4]], 128), toZ), 18, { center: mc });
+    add('motor', xf(lathe([[40, mL / 2 - 14], [mR - 16, mL / 2 - 14]], 96), toZ), 19, { center: mc });
+    add('motor', xf(lathe([[mR - 14, mL / 2 - 14], [mR - 14, -mL / 2 + 10], [30, -mL / 2 + 10]], 96), toZ), 6, { center: mc });
+    add('motor', xf(lathe([[0, mL / 2 + 14], [26, mL / 2 + 14], [36, mL / 2 + 6], [38, mL / 2 - 4]], 64), toZ), 0, { center: mc });
+    add('motor', xf(lathe([[0, mL / 2 + 46], [17, mL / 2 + 46], [20, mL / 2 + 42], [20, mL / 2 + 14]], 48), toZ), 8, { center: mc });
+    { const bt = new GB(); for (let k = 0; k < 10; k++) { const a = (k + 0.5) / 10 * Math.PI * 2; bt.add(xf(hexNut(4.2, 4), toZ), [Math.cos(a) * (mR - 6), Math.sin(a) * (mR - 6), mL / 2 - 2]); } for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; bt.add(xf(hexNut(3.4, 4), toZ), [Math.cos(a) * 29, Math.sin(a) * 29, mL / 2 + 15]); } add('motor', bt.done(), 8, { center: mc }); }
+    add('motor', xf(lathe([[0, -mL / 2 - 10], [70, -mL / 2 - 10], [72, -mL / 2 - 8], [72, -mL / 2 + 2], [0, -mL / 2 + 2]], 72), toZ), 0, { center: mc });
+    { const fb = new GB(); for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; fb.add(xf(hexNut(4, 5), toZ), [Math.cos(a) * 60, Math.sin(a) * 60, -mL / 2 - 12]); } add('motor', fb.done(), 8, { center: mc }); }
+    for (const pp of [P.motorIn, P.motorOut]) add('motor', xf(lathe(barbProfile(26, 0.4375 / 2 * 25.4, 4.2, 3), 28), toNZ), 0, { center: [pp[0], pp[1], pp[2] + 26] });
+    // phase-lead glands on the stator side
+    const glands = [[-30, 52], [0, 58], [30, 52]];
+    for (const [gx, gy] of glands) add('motor', xf(cylinder(8, 14, 24), toZ), 15, { center: [mc[0] + gx, mc[1] + gy, -mL / 2 - 16] });
+    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 90, mc[1], (F.zb - mL / 2 - 12) / 2]], [roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 50, mc[1] + 90, (F.zb - mL / 2 - 12) / 2]], [roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 50, mc[1] - 90, (F.zb - mL / 2 - 12) / 2]]), 12);
+    // ================= DTI HV-500LC =================
+    const ic = g.inv.c, iL = g.inv.L, iH = g.inv.Hh, iW = g.inv.Wd, exI = [200, 0, 140];
+    add('inv', roundedBox(iL, iH - 10, iW, 6, 4), 13, { ex: exI, center: [ic[0], ic[1] - 5, ic[2]] });
+    add('inv', roundedBox(iL - 16, 10, iW - 16, 4, 3), 13, { center: [ic[0], ic[1] + iH / 2 - 6, ic[2]] });
+    { const sc = new GB(); for (let k = 0; k < 7; k++) for (const zz of [-1, 1]) sc.add(cylinder(2.6, 1.6, 12), [ic[0] - iL / 2 + 20 + k * (iL - 40) / 6, ic[1] + iH / 2 - 0.6, ic[2] + zz * (iW / 2 - 14)]); add('inv', sc.done(), 8); }
+    add('inv', roundedBox(110, 1, 46, 3, 2), 21, { center: [ic[0] - 60, ic[1] + iH / 2, ic[2] + 30] });
+    { const ear = new GB(); for (const sx of [-1, 1]) for (const sz of [-1, 1]) { ear.add(roundedBox(26, 8, 22, 3, 2), [ic[0] + sx * (iL / 2 - 30), ic[1] - iH / 2 + 4, ic[2] + sz * (iW / 2 + 9)]); } add('inv', ear.done(), 13); }
+    const hvx = ic[0] + iL / 2 + 6, conn = [[ic[1] + 4, ic[2] + 62], [ic[1] + 4, ic[2] + 20], [ic[1] + 4, ic[2] - 22], [ic[1] + 4, ic[2] - 64]];
+    for (const [cy, cz] of conn) add('inv', xf(roundedBox(30, 24, 30, 5, 2), (v) => v), 15, { center: [hvx + 4, cy, cz] });
+    add('inv', roundedBox(26, 18, 40, 3, 2), 27, { center: [ic[0] - iL / 2 + 60, ic[1] + 10, ic[2] - iW / 2 - 8] });
+    for (const pp of [P.invIn, P.invOut]) add('inv', along(sweep(linePts([0, 0, 0], [0, 34, 0], 2), 7, 24), [-1, 0, 0]), 0, { center: [pp[0] + 34, pp[1], pp[2]] });
+    // orange HV cables: three phases to the motor, DC pair out to the accumulator
+    const mrear = [mc[0], mc[1], -mL / 2 - 24];
+    for (let k = 0; k < 3; k++) {
+      const [cy, cz] = conn[k + 1], [gx, gy] = glands[k];
+      wire('hv', [[hvx + 18, cy, cz], [hvx + 50, cy - 10, cz - 20], [hvx + 40, ic[1] - 80 - k * 12, -150], [ic[0] - 80, ic[1] - 100 - k * 12, -172 + k * 4], [mc[0] + 40, mc[1] - 60 - k * 10, -170 + k * 4], [mc[0] + gx * 1.3, mc[1] + gy + 40, -mL / 2 - 70], [mc[0] + gx, mc[1] + gy, -mL / 2 - 22]], 6.2, 15);
+    }
+    wire('hv', [[hvx + 18, conn[0][0], conn[0][1]], [hvx + 70, conn[0][0] - 10, conn[0][1] + 10], [hvx + 110, ic[1] - 140, 40], [hvx + 120, F.y0 + 30, 0]], 6.2, 15);
+    wire('hv', [[ic[0] - iL / 2 + 60, ic[1] + 10, ic[2] - iW / 2 - 28], [ic[0] - iL / 2 + 40, ic[1] + 40, F.zb + 40], [ic[0] - iL / 2 - 60, ic[1] + 60, F.zb + 16]], 3.2, 4);
+    add('mounts', merge([roundedBox(25.4, 18, Math.abs(F.zb) - iW / 2 - 18, 1.5, 2), [ic[0] - iL / 2 + 30, ic[1] - iH / 2 + 4, (F.zb - iW / 2 - 18) / 2]], [roundedBox(25.4, 18, Math.abs(F.zb) - iW / 2 - 18, 1.5, 2), [ic[0] + iL / 2 - 30, ic[1] - iH / 2 + 4, (F.zb - iW / 2 - 18) / 2]]), 12);
+    // ================= radiator =================
+    const rc = g.rad.c, R = g.rad, exR = [0, -110, 170];
+    const N = radR.N, rows = radR.rows, Th = RADCORE.Th, Fl = RADCORE.Fl, coreH = N * Th + rows * Fl;
+    this.rad = { c: rc, N, rows, coreH, W: R.coreW, D: R.coreD };
+    const inst = [], y0 = rc[1] - coreH / 2; this.tubeY = [];
+    for (let t = 0; t < N; t++) { const y = y0 + Fl * (t + 1) + Th * (t + 0.5); this.tubeY.push(y); inst.push(rc[0], y, rc[2], 0, 0, t, 0); }
+    for (let k = 0; k < rows; k++) inst.push(rc[0], y0 + k * (Fl + Th) + Fl / 2, rc[2], 0, 0, k, 0);
+    const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inst), gl.STATIC_DRAW);
+    add('radiator', stadiumTube(R.coreW + 8, Th, R.coreD), 1, { ex: exR, inst: { base: 0, count: N }, cut: true });
+    add('radiator', finRow(R.coreW, Fl, R.coreD, RADCORE.Fp), 2, { inst: { base: N, count: rows }, cut: true });
+    for (const sx of [-1, 1]) {
+      const tx = rc[0] + sx * (R.coreW / 2 + R.tankW / 2), hx = rc[0] + sx * (R.coreW / 2 + 1.6);
+      add('radiator', merge([roundedBox(R.tankW, R.H, R.D, Math.min(R.tankW, R.D) * 0.42, 7), [tx, rc[1], rc[2]]]), 0, { cut: true });
+      add('radiator', merge([roundedBox(3.2, R.H + 4, R.D + 4, 1.4, 3), [hx, rc[1], rc[2]]]), 8, { cut: true });
+      const rr = Math.min(R.tankW, R.D) * 0.42, aa = R.H / 2 - rr, bbz = R.D / 2 - rr, seg = (cy, cz, a0) => arcPts([0, cy, cz], rr + 0.2, a0, a0 + Math.PI / 2, 'yz', 8);
+      add('radiator', merge([sweep(joinPts(seg(aa, bbz, 0), seg(-aa, bbz, Math.PI / 2), seg(-aa, -bbz, Math.PI), seg(aa, -bbz, Math.PI * 1.5)), 1.15, 10, true), [rc[0] + sx * (R.coreW / 2 + 3.4), rc[1], rc[2]]]), 7, { cut: true });
+      add('radiator', merge([roundedBox(20, 12, 5, 2, 2), [tx, rc[1] - R.H / 2 - 6, -R.D / 2 + 8]]), 0);
+      add('mounts', merge([sweep(arcPts([tx, rc[1] - R.H / 2 - 8, -R.D / 2 + 8], 4.8, 0, Math.PI * 2, 'xy', 24), 2.3, 10, true), [0, 0, 0]], [xf(cylinder(2.6, 18, 6), toZ), [tx, rc[1] - R.H / 2 - 8, -R.D / 2 + 8]]), 9);
+    }
+    add('radiator', merge([roundedBox(R.coreW + 4, 2.4, R.coreD - 2, 1, 2), [rc[0], rc[1] + coreH / 2 + 1.2, rc[2]]], [roundedBox(R.coreW + 4, 2.4, R.coreD - 2, 1, 2), [rc[0], rc[1] - coreH / 2 - 1.2, rc[2]]]), 0);
+    add('radiator', merge([lathe(barbProfile(38, 9.5, 7.9, 3), 32), g.radIn]), 0);
+    add('radiator', along(lathe(barbProfile(38, 9.5, 7.9, 3), 32), [1, 0, 0]), 0, { center: [g.radOut[0] + 19, g.radOut[1], 0] });
+    add('radiator', merge([ring([g.radIn[0], g.radIn[1] + 0.6, 0], 9.9, 1.0, 'xz'), [0, 0, 0]]), 7);
+    add('radiator', merge([ring([g.radOut[0] + 0.6, g.radOut[1], 0], 9.9, 1.0, 'yz'), [0, 0, 0]]), 7);
+    add('mounts', merge([roundedBox(25.4, 8, Math.abs(F.zb) - R.D / 2 + 8, 1.5, 2), [rc[0] - R.coreW / 2 - R.tankW / 2, rc[1] - R.H / 2 - 16, (F.zb - R.D / 2 + 8) / 2]], [roundedBox(25.4, 8, Math.abs(F.zb) - R.D / 2 + 8, 1.5, 2), [rc[0] + R.coreW / 2 + R.tankW / 2, rc[1] - R.H / 2 - 16, (F.zb - R.D / 2 + 8) / 2]]), 12);
+    // ================= shroud + SPAL fan =================
+    const zS0 = rc[2] - R.coreD / 2, zS1 = zS0 - g.shroudLen, exF = [0, -110, -40];
+    add('shroud', merge([shroudLoft(R.coreW + 6, R.coreH + 6, g.fan.D / 2 + 2, zS0, zS1), [rc[0], rc[1], 0]]), 16, { ex: exF });
+    { const fw = R.coreW + 6, fh = R.coreH + 6, t = 10; add('shroud', merge([roundedBox(fw + 2 * t, t, 3, 1, 2), [rc[0], rc[1] + fh / 2 + t / 2, zS0 - 1.5]], [roundedBox(fw + 2 * t, t, 3, 1, 2), [rc[0], rc[1] - fh / 2 - t / 2, zS0 - 1.5]], [roundedBox(t, fh, 3, 1, 2), [rc[0] - fw / 2 - t / 2, rc[1], zS0 - 1.5]], [roundedBox(t, fh, 3, 1, 2), [rc[0] + fw / 2 + t / 2, rc[1], zS0 - 1.5]]), 16); }
+    add('shroud', merge([xf(lathe([[g.fan.D / 2 + 2, 0], [g.fan.D / 2 + 9, 0], [g.fan.D / 2 + 9, 3], [g.fan.D / 2 + 2, 3]], 96), toZ), [rc[0], rc[1], zS1 - 3]]), 16);
+    const fc = g.fan.c, fR = g.fan.D / 2, exFan = [0, -110, -140];
+    add('fan', merge([xf(lathe([[fR - 4, -15], [fR, -15], [fR, 13], [fR + 3, 15], [fR - 4, 15], [fR - 4, -15]], 112), toZ), [fc[0], fc[1], fc[2] + 11]]), 6, { ex: exFan });
+    { const ears = new GB(), bolts = new GB(); for (const [ax, ay] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const ex_ = fc[0] + ax * g.fan.holes / 2, ey = fc[1] + ay * g.fan.holes / 2; ears.add(roundedBox(26, 26, 5, 6, 3), [ex_ - ax * 6, ey - ay * 6, fc[2] + 24]); ears.add(sweep(linePts([fc[0] + ax * fR * 0.66, fc[1] + ay * fR * 0.66, fc[2] + 24], [ex_ - ax * 8, ey - ay * 8, fc[2] + 24], 2), 4, 10), [0, 0, 0]); bolts.add(xf(hexNut(5, 6), toZ), [ex_, ey, fc[2] + 28]); bolts.add(xf(cylinder(3.25, 14, 12), toZ), [ex_, ey, fc[2] + 22]); } add('fan', ears.done(), 6); add('fan', bolts.done(), 8); }
+    add('fan', merge([xf(lathe([[0, -34], [30, -34], [34, -30], [34, 8], [0, 8]], 64), toZ), [fc[0], fc[1], fc[2] - 4]]), 6);
+    add('fan', merge([xf(cylinder(22, 0.8, 48), toZ), [fc[0], fc[1], fc[2] - 38.6]]), 21);
+    { const st = new GB(); for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; st.add(sweep(linePts([Math.cos(a) * 32, Math.sin(a) * 32, 0], [Math.cos(a) * (fR - 3), Math.sin(a) * (fR - 3), 0], 2), 2.6, 10), [fc[0], fc[1], fc[2] - 16]); } add('fan', st.done(), 6); }
+    add('fan', bladeMesh(fR - 6, 36, 10), 6, { spin: [fc[0], fc[1], fc[2] + 8] });
+    wire('fan', [[fc[0] + 20, fc[1] - 30, fc[2] - 34], [fc[0] + 60, fc[1] - 70, fc[2] - 50], [fc[0] + 160, fc[1] - 60, F.zb + 16]], 1.8, 4);
+    // ================= catch can =================
+    const cc = g.catchCan.c, cR = g.catchCan.D / 2, cH = g.catchCan.H, exC = [-180, 160, -110];
+    const body = [[0, -cH / 2], [cR - 4, -cH / 2], [cR, -cH / 2 + 4]]; for (let k = 0; k < 6; k++) { const y = -cH / 2 + 14 + k * 3.2; body.push([cR, y], [cR - 1.2, y + 1.2], [cR, y + 2.4]); } body.push([cR, cH / 2 - 10], [cR - 1, cH / 2 - 6], [cR - 3, cH / 2 - 6]);
+    add('can', merge([lathe(body, 72), cc]), 0, { ex: exC });
+    add('can', merge([lathe([[cR - 3, cH / 2 - 6], [cR + 1, cH / 2 - 6], [cR + 1, cH / 2 + 10], [cR - 3, cH / 2 + 12], [0, cH / 2 + 12]], 72), cc]), 5);
+    this.canIn = [cc[0] + 16, cc[1] + cH / 2 + 34, cc[2]]; this.canVent = [cc[0] - 16, cc[1] + cH / 2 + 30, cc[2]];
+    add('can', merge([hexNut(8, 8), [this.canIn[0], cc[1] + cH / 2 + 16, cc[2]]], [hexNut(8, 8), [this.canVent[0], cc[1] + cH / 2 + 16, cc[2]]]), 24);
+    add('can', merge([cylinder(3.2, 18, 16), [this.canIn[0], this.canIn[1] - 9, cc[2]]], [cylinder(3.2, 14, 16), [this.canVent[0], this.canVent[1] - 7, cc[2]]]), 8);
+    // sight tube with water level
+    const stx = cc[0] + cR + 8;
+    add('can', merge([cylinder(5, cH - 30, 24), [stx, cc[1], cc[2] + 8]]), 11, { glass: true, alpha: 1 });
+    add('can', merge([cylinder(3.6, (cH - 34) * 0.42, 20), [stx, cc[1] - (cH - 34) * 0.29, cc[2] + 8]]), 26, { glass: true, alpha: 0.85 });
+    add('can', merge([roundedBox(14, 10, 12, 2, 2), [stx - 4, cc[1] + cH / 2 - 18, cc[2] + 8]], [roundedBox(14, 10, 12, 2, 2), [stx - 4, cc[1] - cH / 2 + 18, cc[2] + 8]]), 0);
+    add('can', ring([cc[0], cc[1], cc[2]], cR + 1.6, 1.8, 'xz'), 8);
+    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb - cc[2]) - cR, 1.5, 2), [cc[0], cc[1], (F.zb + cc[2] - cR) / 2]]), 12);
+    const ov = catmull([this.overflowNip, [this.overflowNip[0] + 20, this.overflowNip[1] + 12, -20], [cc[0] + 40, this.canIn[1] + 46, cc[2]], this.canIn], 4);
+    add('lines', sweep(ov, 4.3, 16), 11, { glass: true });
+    add('lines', sweep(ov, 2.6, 10), 26, { glass: true, alpha: 0.5 });
+    const vent = catmull([this.canVent, [this.canVent[0] - 10, this.canVent[1] + 30, cc[2]], [cc[0] - cR - 30, cc[1], cc[2] - 20], [cc[0] - cR - 40, F.y0 + 20, cc[2] - 30]], 6);
+    add('lines', sweep(vent, 3.2, 12), 11, { glass: true });
+    // ================= hoses, nylon clamps, sensors =================
+    this.hoseGeo = {};
+    for (const r of runs) {
+      const d = hoseDims[r.line], ri = d.ID / 2, ro = d.OD / 2;
+      add(r.id, sweep(r.path, ri * 0.97, 28), 10, { coolant: true, glass: true, alpha: 0.78, len: r.L, hose: r.id, cut: true });
+      add(r.id, sweep(r.path, ro, 32), 11, { glass: true, alpha: 1, cut: true });
+      const cl = new GB();
+      for (const k of [0.012, 0.988]) {
+        const s = this.pathAt(r.path, k), dd = this.pathDir(r.path, k), u = nrm(cross(dd, Math.abs(dd[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), w = cross(dd, u), rp = [];
+        for (let a = 0; a <= 48; a++) { const t = a / 48 * Math.PI * 2; rp.push([s[0] + (u[0] * Math.cos(t) + w[0] * Math.sin(t)) * (ro + 1.2), s[1] + (u[1] * Math.cos(t) + w[1] * Math.sin(t)) * (ro + 1.2), s[2] + (u[2] * Math.cos(t) + w[2] * Math.sin(t)) * (ro + 1.2)]); }
+        cl.add(sweep(rp, 1.6, 6, true), [0, 0, 0]);
+        cl.add(roundedBox(6, 6, 6, 1.5, 1), [s[0] + u[0] * (ro + 4), s[1] + u[1] * (ro + 4), s[2] + u[2] * (ro + 4)]);
+      }
+      add(r.id, cl.done(), 6);
+      if (r.sensor) {
+        const k = 0.5, s = this.pathAt(r.path, k), dd = this.pathDir(r.path, k), up = nrm(cross(dd, [0, 0, 1])), flow = r.sensor === 'flow';
+        add(r.id, merge([along(cylinder(ro + 3.5, flow ? 48 : 26, 36), dd), s]), flow ? 6 : 0);
+        if (!flow) add(r.id, merge([along(hexNut(ro + 4.5, 8), dd), s]), 0);
+        const tip = [s[0] + up[0] * (ro + 14), s[1] + up[1] * (ro + 14), s[2] + up[2] * (ro + 14)];
+        add(r.id, merge([along(flow ? roundedBox(18, 16, 22, 3, 2) : hexNut(6.5, 12), up), [s[0] + up[0] * (ro + 7), s[1] + up[1] * (ro + 7), s[2] + up[2] * (ro + 7)]]), flow ? 6 : 8);
+        add(r.id, merge([along(cylinder(5, 12, 16), up), tip]), 27);
+        wire(r.id, [[tip[0] + up[0] * 6, tip[1] + up[1] * 6, tip[2] + up[2] * 6], [tip[0] + up[0] * 30, tip[1] + up[1] * 30 + 10, tip[2] - 30], [tip[0] * 0.9, tip[1] + 20, F.zb + 16]], 1.5, 4);
+      }
+      this.hoseGeo[r.id] = { path: r.path, cum: this.cumLen(r.path), L: r.L, ri };
+    }
+    // ================= frame: 1" tube members near each mount, faded at the ends =================
+    const member = (y, xa, xb, z = F.zb) => { const p = linePts([xa, y, z], [xb, y, z], 2); add('frame', sweep(p, 12.7, 24), 12, { fade: true, len: Math.abs(xb - xa) }); };
+    member(B + 38, -260, 220); member(pc[1] - 30, -200, 220); member(ic[1] - iH / 2 + 4, ic[0] - iL / 2 - 80, ic[0] + iL / 2 + 120); member(mc[1], mc[0] - 220, mc[0] + 60);
+    member(mc[1] + 90, mc[0] - 200, mc[0] + 80); member(mc[1] - 90, mc[0] - 200, mc[0] + 80); member(cc[1], cc[0] - 140, cc[0] + 120); member(rc[1] - R.H / 2 - 16, rc[0] - 260, rc[0] + 260);
+    const post = (x, ya, yb, z = F.zb) => add('frame', sweep(linePts([x, ya, z], [x, yb, z], 2), 12.7, 24), 12, { fade: true, len: Math.abs(yb - ya) });
+    post(-500, -40, 1250); post(560, -40, 1250);
+    // floor
+    const fl = new GB(); const S = 5000; { const a = fl.v([-S, 0, -S], [0, 1, 0]), b = fl.v([S, 0, -S], [0, 1, 0]), c = fl.v([S, 0, S], [0, 1, 0]), d = fl.v([-S, 0, S], [0, 1, 0]); fl.q(a, b, c, d); }
+    this.floor = this.up(fl.done()); this.floorY = F.y0 - 14;
+    this.home = { c: [40, 600, 0], r: 760 }; if (!this.bounds) this.bounds = { c: [...this.home.c], r: this.home.r }; this.goal = this.goal || { c: [...this.home.c], r: this.home.r };
+    this.focusSets = { loop: this.home, pot: { c: [0, GEO.pot.base + 10, 0], r: 165 }, pump: { c: [0, 690, 0], r: 200 }, branches: { c: [-10, 470, 0], r: 430 }, radiator: { c: [0, 75, -30], r: 240 } };
+    this.ensureParticles(true);
+  }
+  cumLen(path) { const c = [0]; for (let i = 1; i < path.length; i++) c.push(c[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2])); return c; }
+  pathAt(path, k) { const c = this.cumLen(path), L = c[c.length - 1] * k; return this.sampleCum(path, c, L); }
+  pathDir(path, k) { const a = this.pathAt(path, Math.max(0, k - 0.01)), b = this.pathAt(path, Math.min(1, k + 0.01)); return nrm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]); }
+  sampleCum(path, c, s) {
+    if (s <= 0) return path[0]; const L = c[c.length - 1]; if (s >= L) return path[path.length - 1];
+    let lo = 0, hi = c.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c[m] < s) lo = m; else hi = m; }
+    const f = (s - c[lo]) / Math.max(1e-6, c[hi] - c[lo]), a = path[lo], b = path[hi];
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+  // ---------- live state ----------
+  setState(st) { // st: {Tlo,Thi, hoseT:{id:[Ta,Tb]}, hoseV:{id:m/s}, rad:{mapC,mapA,nx,TcIn,TaIn}, fanOn, potV}
+    this.st = st; if (st.rad) this.uploadTemps(st.rad);
+  }
+  uploadTemps(r) {
+    const gl = this.gl, nx = r.nx, rows = r.rows, N = r.N, d = new Uint8Array(nx * rows * 4), lo = this.st.Tlo, hi = this.st.Thi;
+    const tn = (T) => Math.max(0, Math.min(255, Math.round((T - lo) / Math.max(0.1, hi - lo) * 255)));
+    for (let k = 0; k < rows; k++) for (let i = 0; i < nx; i++) { const a = Math.min(N - 1, Math.max(0, k - 1)), b = Math.min(N - 1, k), o = (k * nx + i) * 4; d[o] = tn((r.mapC[a][i] + r.mapC[b][i]) / 2); d[o + 1] = tn((r.mapA[a][i] + r.mapA[b][i]) / 2); d[o + 2] = k < N ? tn(r.mapC[k][i]) : 0; d[o + 3] = 255; }
+    gl.bindTexture(gl.TEXTURE_2D, this.tTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, nx, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    this.tSize = [nx, rows];
+  }
+  ensureParticles() {
+    this.pt = [];
+    for (const r of this.runs) { const n = Math.max(6, Math.round(r.L / 14)); for (let i = 0; i < n; i++) this.pt.push({ h: r.id, s: Math.random() * r.L, j: (Math.random() - 0.5) * 0.7, k: Math.random() * Math.PI * 2 }); }
+    this.swirl = []; for (let i = 0; i < 160; i++) this.swirl.push({ a: Math.random() * 6.28, y: Math.random(), r: 0.55 + Math.random() * 0.4 });
+    this.radPt = []; for (let i = 0; i < 260; i++) this.radPt.push({ t: Math.floor(Math.random() * (this.rad ? this.rad.N : 10)), x: Math.random(), z: (Math.random() - 0.5) * 0.8 });
+  }
+  offsetOf(part) { const e = this.explode; const p = this.parts[part]; return p ? [p.ex[0] * e, p.ex[1] * e, p.ex[2] * e] : [0, 0, 0]; }
+  // ---------- frame ----------
+  focus(k) { const f = this.focusSets && this.focusSets[k]; if (!f) return; this.goal = { c: [...f.c], r: f.r }; this.pan = [0, 0]; this.zoom = 1; }
+  frame(dt) {
+    if (!this.items || !this.st) return;
+    if (this.goal) { const a = Math.min(1, dt * 5); for (let i = 0; i < 3; i++) this.bounds.c[i] += (this.goal.c[i] - this.bounds.c[i]) * a; this.bounds.r += (this.goal.r - this.bounds.r) * a; }
+    if (this.autoSpin) this.yaw += dt * 0.08;
+    this.t += dt; if (this.st.fanOn) this.fanAng -= dt * 14;
+    const slow = 1 / 12;
+    for (const p of this.pt) { const v = (this.st.hoseV[p.h] || 0) * 1000 * slow; p.s += v * dt; const L = this.hoseGeo[p.h].L; if (p.s > L) p.s -= L; }
+    for (const p of this.swirl) { p.a += dt * 4 * (1.2 - p.y); p.y += dt * 0.12; if (p.y > 1) p.y -= 1; }
+    for (const p of this.radPt) { p.x += dt * Math.max(0.02, this.st.radV || 0.2) * 1000 * slow / (this.rad.W); if (p.x > 1) { p.x -= 1; p.t = Math.floor(Math.random() * this.rad.N); } }
+    this.render();
+  }
+  ribbonVerts() {
+    const out = [], push = (a, b, Ta, Tb, fa, fb) => { const e = [b[0] + (b[0] - a[0]), b[1] + (b[1] - a[1]), b[2] + (b[2] - a[2])]; out.push(...a, ...b, -1, Ta, fa, ...a, ...b, 1, Ta, fa, ...b, ...e, 1, Tb, fb, ...a, ...b, -1, Ta, fa, ...b, ...e, 1, Tb, fb, ...b, ...e, -1, Tb, fb); };
+    const ex = this.explode > 0.02;
+    if (this.flow && !ex) for (const p of this.pt) {
+      const G = this.hoseGeo[p.h], T = this.st.hoseT[p.h] || [40, 40], v = this.st.hoseV[p.h] || 0; const tail = Math.max(6, v * 1000 / 12 * 0.22);
+      const segs = 5; let prev = null;
+      for (let k = 0; k <= segs; k++) {
+        const s = p.s - tail * k / segs; if (s < 0) break;
+        const c = this.sampleCum(G.path, G.cum, s), d = this.sampleCum(G.path, G.cum, Math.min(G.L, s + 1)), dir = nrm([d[0] - c[0], d[1] - c[1], d[2] - c[2]]);
+        const u = nrm(cross(dir, Math.abs(dir[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), w = cross(dir, u), rr = G.ri * p.j;
+        const q = [c[0] + (u[0] * Math.cos(p.k) + w[0] * Math.sin(p.k)) * rr, c[1] + (u[1] * Math.cos(p.k) + w[1] * Math.sin(p.k)) * rr, c[2] + (u[2] * Math.cos(p.k) + w[2] * Math.sin(p.k)) * rr];
+        if (prev) push(prev, q, T[0], T[0], (1 - (k - 1) / segs) * 0.95, (1 - k / segs) * 0.95);
+        prev = q;
+      }
+    }
+    if (this.cut && this.flow && !ex) {
+      const sp = GEO.pot, B = sp.base, Tp = this.st.potT || 40;
+      for (const p of this.swirl) {
+        let prev = null;
+        for (let k = 0; k < 5; k++) {
+          const a = p.a - k * 0.12, yy = p.y - k * 0.008, y = B + sp.inletY - yy * (sp.inletY + sp.cone * 0.9);
+          const rad = y > B ? sp.ri * p.r : (sp.outRi + (sp.ri - sp.outRi) * Math.max(0, (y - (B - sp.cone)) / sp.cone)) * p.r;
+          const q = [Math.cos(a) * rad, y, -Math.abs(Math.sin(a)) * rad - 0.5];
+          if (prev) push(prev, q, Tp, Tp, 1 - (k - 1) / 5, 1 - k / 5); prev = q;
+        }
+      }
+      const R = this.st.rad, rc = this.rad.c;
+      if (R) for (const p of this.radPt) {
+        const y = this.tubeY[p.t], x0 = rc[0] - this.rad.W / 2 + p.x * this.rad.W, x1 = x0 - 14; if (x1 < rc[0] - this.rad.W / 2) continue;
+        const ix = Math.min(R.nx - 1, Math.floor(p.x * R.nx)), T = R.mapC[Math.min(R.N - 1, p.t)][ix];
+        push([x1, y, -Math.abs(p.z) * this.rad.D * 0.4], [x0, y, -Math.abs(p.z) * this.rad.D * 0.4], T, T, 0.1, 0.9);
+      }
+    }
+    return new Float32Array(out);
+  }
+  // ---------- drawing ----------
+  bindMesh(m) {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.n); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.u); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(2, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.i);
+  }
+  modelOf(it) {
+    const o = this.offsetOf(it.part), c = it.center || [0, 0, 0];
+    if (it.spin) return M4.mul(M4.tr(it.spin[0] + o[0], it.spin[1] + o[1], it.spin[2] + o[2]), M4.rz(this.fanAng));
+    return M4.tr(o[0] + c[0], o[1] + c[1], o[2] + c[2]);
+  }
+  drawIt(it, prog) {
+    const gl = this.gl, u = prog.u;
+    gl.uniformMatrix4fv(u.uModel, false, this.modelOf(it));
+    if (u.uCutOn) gl.uniform1i(u.uCutOn, this.cut && it.cut ? 1 : 0);
+    this.bindMesh(it.mesh);
+    if (it.inst) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
+      gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 28, it.inst.base * 28); gl.vertexAttribDivisor(3, 1);
+      gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 28, it.inst.base * 28 + 12); gl.vertexAttribDivisor(4, 1);
+      gl.drawElementsInstanced(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0, it.inst.count);
+      gl.vertexAttribDivisor(3, 0); gl.vertexAttribDivisor(4, 0); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4);
+    } else {
+      gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4); gl.vertexAttrib3f(3, 0, 0, 0); gl.vertexAttrib4f(4, 0, 0, 0, 0);
+      gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0);
+    }
+  }
+  camera() {
+    const cv = this.cv, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const Wc = Math.max(1, Math.round(cv.clientWidth * dpr)), Hc = Math.max(1, Math.round(cv.clientHeight * dpr));
+    if (cv.width !== Wc || cv.height !== Hc) { cv.width = Wc; cv.height = Hc; }
+    const aspect = Wc / Hc, fov = 0.55, b = this.bounds;
+    const fit = b.r / Math.tan(Math.min(fov / 2, Math.atan(Math.tan(fov / 2) * aspect)));
+    const dist = fit * 0.95 * this.zoom * (1 + 0.3 * this.explode);
+    const cy = Math.cos(this.pitch);
+    const right = [Math.cos(this.yaw), 0, -Math.sin(this.yaw)];
+    const tgt = [b.c[0] + right[0] * this.pan[0], b.c[1] + this.pan[1], b.c[2] + right[2] * this.pan[0]];
+    const eye = [tgt[0] + Math.sin(this.yaw) * cy * dist, tgt[1] + Math.sin(this.pitch) * dist, tgt[2] + Math.cos(this.yaw) * cy * dist];
+    const V = M4.look(eye, tgt, [0, 1, 0]), Pm = M4.persp(fov, aspect, Math.max(4, dist * 0.04), dist * 6 + 3000);
+    Object.assign(this, { VP: M4.mul(Pm, V), V, Pm, eye, Wc, Hc, dpr });
+  }
+  tex(w, h, ifmt, fmt, type, filt) { const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }
+  fbo(color, depth) { const gl = this.gl, f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); if (color) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0); if (depth) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depth, 0); return f; }
+  ensureTargets() {
+    const gl = this.gl, W = this.Wc, H = this.Hc;
+    if (this.tg && this.tg.W === W && this.tg.H === H) return this.tg.ok;
+    const old = this.tg; if (old) { for (const t of old.texs) gl.deleteTexture(t); for (const f of old.fbs) gl.deleteFramebuffer(f); for (const r of old.rbs) gl.deleteRenderbuffer(r); }
+    const t = this.tg = { W, H, texs: [], fbs: [], rbs: [], ok: false };
+    try {
+      const hw = Math.max(1, W >> 1), hh = Math.max(1, H >> 1), qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+      t.msFB = gl.createFramebuffer(); const rc = gl.createRenderbuffer(), rd = gl.createRenderbuffer(); t.rbs.push(rc, rd);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rc); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.samples, gl.RGBA16F, W, H);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rd); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.samples, gl.DEPTH_COMPONENT24, W, H);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.msFB); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rc); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rd);
+      t.resTex = this.tex(W, H, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR); t.resFB = this.fbo(t.resTex);
+      t.gN = this.tex(hw, hh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST); t.gD = this.tex(hw, hh, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, gl.NEAREST); t.gFB = this.fbo(t.gN, t.gD);
+      t.ao = this.tex(hw, hh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR); t.aoFB = this.fbo(t.ao);
+      t.aoB = this.tex(hw, hh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR); t.aoBFB = this.fbo(t.aoB);
+      t.bA = this.tex(qw, qh, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR); t.bAFB = this.fbo(t.bA);
+      t.bB = this.tex(qw, qh, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR); t.bBFB = this.fbo(t.bB);
+      t.texs.push(t.resTex, t.gN, t.gD, t.ao, t.aoB, t.bA, t.bB); t.fbs.push(t.msFB, t.resFB, t.gFB, t.aoFB, t.aoBFB, t.bAFB, t.bBFB);
+      Object.assign(t, { hw, hh, qw, qh });
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.msFB); t.ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.resFB); t.ok = t.ok && gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    } catch (e) { t.ok = false; }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!t.ok) this.hdr = false;
+    return t.ok;
+  }
+  fs(prog) { const gl = this.gl; gl.useProgram(prog); gl.bindVertexArray(this.fsVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null); }
+  render() {
+    if (!this.ok) return;
+    const gl = this.gl; this.camera();
+    const st = this.st, ex = this.explode > 0.02;
+    const post = this.hdr && this.ensureTargets(), T = this.tg;
+    // shadows
+    const ext = this.bounds.r * 1.15, L = this.Ldir, c = this.bounds.c, le = [c[0] + L[0] * 2500, c[1] + L[1] * 2500, c[2] + L[2] * 2500];
+    const LV = M4.mul(M4.ortho(-ext, ext, -ext, ext, 300, 5200), M4.look(le, c, [0, 1, 0]));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shFB); gl.viewport(0, 0, this.SM, this.SM); gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(this.dprog); gl.uniformMatrix4fv(this.dprog.u.uVP, false, LV);
+    for (const it of this.items) if (!it.glass && !(ex && (it.part === 'hv' || /^h\d/.test(it.part)))) this.drawIt(it, this.dprog);
+    if (post) {
+      // normal + depth prepass (half res) and SSAO
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.gFB); gl.viewport(0, 0, T.hw, T.hh); gl.clearColor(0.5, 0.5, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      const G = this.gprog; gl.useProgram(G); gl.uniformMatrix4fv(G.u.uVP, false, this.VP); gl.uniformMatrix4fv(G.u.uV, false, this.V); gl.uniform1f(G.u.uCutZ, 0.5);
+      gl.uniformMatrix4fv(G.u.uModel, false, M4.tr(0, this.floorY, 0)); gl.uniform1i(G.u.uCutOn, 0); this.bindMesh(this.floor); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4); gl.drawElements(gl.TRIANGLES, this.floor.count, gl.UNSIGNED_INT, 0);
+      for (const it of this.items) if (!it.glass && !(ex && (it.part === 'hv' || it.part === 'lines' || it.part === 'bleed' || /^h\d/.test(it.part)))) this.drawIt(it, G);
+      gl.disable(gl.DEPTH_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.aoFB);
+      const S = this.ssaoProg; gl.useProgram(S);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.gD); gl.uniform1i(S.u.uD, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T.gN); gl.uniform1i(S.u.uN, 1);
+      gl.uniformMatrix4fv(S.u.uP, false, this.Pm); gl.uniformMatrix4fv(S.u.uIP, false, inv4(this.Pm)); gl.uniform3fv(S.u['uK[0]'], this.kernel); gl.uniform1f(S.u.uRad, 26);
+      this.fs(S);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.aoBFB);
+      const AB = this.aoBlurProg; gl.useProgram(AB);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.ao); gl.uniform1i(AB.u.uA, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T.gD); gl.uniform1i(AB.u.uD, 1); gl.uniform2f(AB.u.uTx, 1 / T.hw, 1 / T.hh);
+      this.fs(AB);
+      gl.enable(gl.DEPTH_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.msFB);
+    } else gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.Wc, this.Hc);
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    // studio backdrop
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.useProgram(this.backProg); gl.uniform1i(this.backProg.u.uHDR, post ? 1 : 0); this.fs(this.backProg); gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+    const P = this.prog, u = P.u; gl.useProgram(P);
+    gl.uniformMatrix4fv(u.uVP, false, this.VP); gl.uniform3fv(u.uCam, this.eye); gl.uniform1f(u.uThermal, this.thermal);
+    gl.uniform1f(u.uTlo, st.Tlo); gl.uniform1f(u.uThi, st.Thi); gl.uniform3fv(u.uLdir, L); gl.uniformMatrix4fv(u.uLightVP, false, LV);
+    gl.uniform1f(u.uCutZ, 0.5); gl.uniform1f(u.uTime, this.t); gl.uniform1i(u.uHDR, post ? 1 : 0); gl.uniform1i(u.uUseAO, post ? 1 : 0); gl.uniform2f(u.uScreen, this.Wc, this.Hc); gl.uniform1f(u.uFade, 0);
+    const ro = this.offsetOf('radiator');
+    gl.uniform1f(u.uRW, this.rad.W); gl.uniform1f(u.uRD, this.rad.D); gl.uniform1f(u.uLp, RADCORE.Lp); gl.uniform1f(u.uTheta, RADCORE.theta);
+    gl.uniform3f(u.uRC, this.rad.c[0] + ro[0], this.rad.c[1] + ro[1], this.rad.c[2] + ro[2]); gl.uniform2fv(u.uTempSize, this.tSize || [1, 1]);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(u.uShadow, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tTex); gl.uniform1i(u.uTemp, 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, post ? T.aoB : this.tTex); gl.uniform1i(u.uAO, 2);
+    gl.uniform1i(u.uKind, 3); gl.uniform1i(u.uCutOn, 0); gl.uniform1f(u.uAlpha, 1); gl.uniform1i(u.uSel, 0);
+    gl.uniformMatrix4fv(u.uModel, false, M4.tr(0, this.floorY, 0)); this.bindMesh(this.floor); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4); gl.drawElements(gl.TRIANGLES, this.floor.count, gl.UNSIGNED_INT, 0);
+    const setIt = (it) => {
+      gl.uniform1i(u.uKind, it.kind); gl.uniform1f(u.uAlpha, it.alpha); gl.uniform1i(u.uSel, this.sel === it.part ? 1 : 0);
+      gl.uniform1f(u.uFade, it.fade ? 1 : 0); if (it.fade) gl.uniform1f(u.uLen, it.len);
+      if (it.kind === 10) { const Tt = st.hoseT[it.hose] || [40, 40]; gl.uniform1f(u.uTa, Tt[0]); gl.uniform1f(u.uTb, Tt[1]); gl.uniform1f(u.uLen, it.len); }
+    };
+    const hideEx = (it) => ex && (it.part === 'hv' || it.part === 'lines' || it.part === 'bleed' || (/^h\d/.test(it.part) && !it.glass));
+    for (const it of this.items) if (!it.glass && !hideEx(it)) { setIt(it); const fin = it.kind === 2; if (fin) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE); this.drawIt(it, P); if (fin) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE); }
+    gl.enable(gl.BLEND); gl.depthMask(false);
+    const rv = this.ribbonVerts();
+    if (rv.length) {
+      const R = this.rprog; gl.useProgram(R); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniformMatrix4fv(R.u.uVP, false, this.VP); gl.uniform2f(R.u.uRes, this.Wc / 2, this.Hc / 2); gl.uniform1f(R.u.uWid, 1.6 * this.dpr); gl.uniform1f(R.u.uTlo, st.Tlo); gl.uniform1f(R.u.uThi, st.Thi); gl.uniform1i(R.u.uHDR, post ? 1 : 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.ribBuf); gl.bufferData(gl.ARRAY_BUFFER, rv, gl.STREAM_DRAW);
+      for (let i = 0; i < 3; i++) { gl.enableVertexAttribArray(i); gl.vertexAttribDivisor(i, 0); gl.vertexAttribPointer(i, 3, gl.FLOAT, false, 36, i * 12); }
+      gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4);
+      gl.drawArrays(gl.TRIANGLES, 0, rv.length / 9);
+      gl.useProgram(P);
+    }
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (const it of this.items) if (it.glass && it.coolant) { setIt(it); if (ex) gl.uniform1f(u.uAlpha, 0.12 * (1 - this.explode) + 0.02); this.drawIt(it, P); }
+    for (const it of this.items) if (it.glass && !it.coolant && !hideEx(it)) { setIt(it); if (ex && it.kind === 11) gl.uniform1f(u.uAlpha, 0.25); this.drawIt(it, P); }
+    gl.depthMask(true); gl.disable(gl.BLEND);
+    if (post) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, T.msFB); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, T.resFB);
+      gl.blitFramebuffer(0, 0, this.Wc, this.Hc, 0, 0, this.Wc, this.Hc, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.disable(gl.DEPTH_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.bAFB); gl.viewport(0, 0, T.qw, T.qh);
+      const Br = this.brightProg; gl.useProgram(Br); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.resTex); gl.uniform1i(Br.u.uC, 0); gl.uniform2f(Br.u.uTx, 2 / this.Wc, 2 / this.Hc); this.fs(Br);
+      const Bl = this.blurProg;
+      for (let k = 0; k < 2; k++) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.bBFB); gl.useProgram(Bl); gl.bindTexture(gl.TEXTURE_2D, T.bA); gl.uniform1i(Bl.u.uC, 0); gl.uniform2f(Bl.u.uDir, (1 + k) / T.qw, 0); this.fs(Bl);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.bAFB); gl.bindTexture(gl.TEXTURE_2D, T.bB); gl.uniform2f(Bl.u.uDir, 0, (1 + k) / T.qh); this.fs(Bl);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.Wc, this.Hc);
+      const Cp = this.compProg; gl.useProgram(Cp);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.resTex); gl.uniform1i(Cp.u.uC, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T.bA); gl.uniform1i(Cp.u.uB, 1);
+      gl.uniform1f(Cp.u.uExp, 0.95); gl.uniform2f(Cp.u.uRes, this.Wc, this.Hc); this.fs(Cp);
+      gl.enable(gl.DEPTH_TEST);
+    }
+    this.placeLabels();
+  }
+  pickAt(cx, cy) {
+    if (!this.items) return;
+    const gl = this.gl, r = this.cv.getBoundingClientRect(), x = Math.round((cx - r.left) * this.dpr), y = Math.round(this.Hc - (cy - r.top) * this.dpr);
+    if (!this.pickFB) {
+      this.pickFB = gl.createFramebuffer(); this.pickTex = gl.createTexture(); this.pickDepth = gl.createRenderbuffer();
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.pickTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.Wc, this.Hc, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepth); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, this.Wc, this.Hc);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFB); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pickTex, 0); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.pickDepth);
+    gl.viewport(0, 0, this.Wc, this.Hc); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+    const Pp = this.pprog; gl.useProgram(Pp); gl.uniformMatrix4fv(Pp.u.uVP, false, this.VP); gl.uniform1f(Pp.u.uCutZ, 0.5);
+    for (const it of this.items) { if (it.kind === 11 && it.part !== 'lines') continue; const id = this.parts[it.part].pid; gl.uniform3f(Pp.u.uPickC, (id & 255) / 255, ((id >> 8) & 255) / 255, 0); this.drawIt(it, Pp); }
+    const px = new Uint8Array(4); gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const id = px[0] + px[1] * 256; let part = null; for (const k in this.parts) if (this.parts[k].pid === id) part = k;
+    this.sel = part; this.onPick && this.onPick(part, [cx - r.left, cy - r.top]);
+  }
+  project(pt) {
+    const m = this.VP, [x, y, z] = pt;
+    const cx = m[0] * x + m[4] * y + m[8] * z + m[12], cy = m[1] * x + m[5] * y + m[9] * z + m[13], cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    return [(cx / cw * 0.5 + 0.5) * this.Wc / this.dpr, (1 - (cy / cw * 0.5 + 0.5)) * this.Hc / this.dpr, cw];
+  }
+  placeLabels() {
+    if (!this.labelsEl) return;
+    const P = ports(), add = (p, part) => { const o = this.offsetOf(part); return [p[0] + o[0], p[1] + o[1], p[2] + o[2]]; };
+    const pts = { lpot: add([0, GEO.pot.top + 70, 0], 'pot'), lmin: add(P.motorIn, 'motor'), linv: add(P.invOut, 'inv'), lrin: add(GEO.radInEnd, 'radiator'), lrout: add(GEO.radOutEnd, 'radiator'), lfan: add([GEO.fan.c[0] + GEO.fan.D * 0.42, GEO.fan.c[1] - GEO.fan.D * 0.42, GEO.fan.c[2] - 20], 'fan') };
+    const placed = [];
+    for (const id in pts) {
+      const el = this.labelsEl.querySelector('[data-k=' + id + ']'); if (!el) continue;
+      const [x, y, w] = this.project(pts[id]);
+      if ((id === 'lfan' && this.eye[2] > GEO.fan.c[2] + 60) || ((id === 'lmin' || id === 'linv') && this.eye[2] < -300)) { el.style.opacity = 0; continue; }
+      let vis = w > 0 && x > 50 && x < this.Wc / this.dpr - 50 && y > 60 && y < this.Hc / this.dpr - 10 && getComputedStyle(el).display !== 'none';
+      for (const q of placed) if (Math.abs(q[0] - x) < 130 && Math.abs(q[1] - y) < 44) vis = false;
+      if (vis) placed.push([x, y]);
+      el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`; el.style.opacity = vis ? 1 : 0;
+    }
+  }
+}
+</script>
+<script>{
+const $ = (id) => document.getElementById(id);
+const fx = (v, d = 1) => (!isFinite(v) ? '–' : (Math.abs(v) < 1e-9 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const DEF = defaultInputs();
+let S = { ...DEF };
+try { const sv = JSON.parse(localStorage.getItem('cooling-loop.v1') || 'null'); if (sv) S = { ...DEF, ...sv }; } catch (e) {}
+const save = () => { try { localStorage.setItem('cooling-loop.v1', JSON.stringify(S)); } catch (e) {} };
+const frac = (v) => { const n = Math.round(v * 16); const g = (a, b) => b ? g(b, a % b) : a; const w = Math.floor(n / 16), r = n % 16; if (!r) return w + '"'; const k = g(r, 16); return (w ? w + ' ' : '') + (r / k) + '/' + (16 / k) + '"'; };
+
+// ---------- controls ----------
+const C = [
+  { id: 'speed', g: 'drive', l: 'Vehicle speed', u: 'km/h', min: 0, max: 120, step: 1, d: 0, sub: 'Average speed; sets ram air through the radiator' },
+  { id: 'TaIn', g: 'drive', l: 'Ambient air', u: '°C', min: 5, max: 45, step: 0.1, d: 1 },
+  { id: 'alt', g: 'drive', type: 'select', l: 'Site', opts: [[300, 'Michigan endurance (about 300 m)'], [990, 'Lubbock, TX (990 m)'], [0, 'Sea level']] },
+  { id: 'Cp', g: 'drive', l: 'Duct pressure recovery', u: '', min: 0.1, max: 0.9, step: 0.01, d: 2, sub: 'Share of the car’s dynamic pressure reaching the core (estimate)' },
+  { id: 'fan', g: 'drive', type: 'toggle', l: 'Radiator fan (SPAL VA22) on' },
+  { id: 'qMotor', g: 'heat', l: 'Motor heat to coolant (stator)', u: 'kW', min: 0, max: 8, step: 0.01, d: 2, sub: 'EMRAX 228 at 64 kW continuous, η 0.92: 5.56 kW loss, 3.89 kW to liquid, 1.67 kW rotor to air' },
+  { id: 'qInv', g: 'heat', l: 'Inverter heat to coolant', u: 'kW', min: 0, max: 2.5, step: 0.001, d: 3, sub: 'HV-500LC, interpolated at 504 V / 180 A' },
+  { id: 'loadPct', g: 'heat', l: 'Duty, % of those loads', u: '%', min: 10, max: 150, step: 1, d: 0 },
+  { id: 'pumpV', g: 'pump', l: 'Pump voltage (EBP40 24 V)', u: 'V', min: 12, max: 28, step: 0.1, d: 1, sub: 'Speed assumed ∝ voltage; flow ∝ speed, head ∝ speed²' },
+  { id: 'idMain', g: 'pump', type: 'in', l: 'Pump line ID (pot → pump → Y)', min: 0.375, max: 1, step: 0.0625 },
+  { id: 'idMotor', g: 'pump', type: 'in', l: 'Motor branch hose ID', min: 0.25, max: 0.75, step: 0.0625 },
+  { id: 'idInv', g: 'pump', type: 'in', l: 'Inverter branch hose ID', min: 0.25, max: 0.75, step: 0.0625 },
+  { id: 'idReturn', g: 'pump', type: 'in', l: 'Radiator feed and return ID', min: 0.375, max: 1, step: 0.0625 },
+  { id: 'orificeMM', g: 'pump', l: 'Inverter-leg restrictor Ø (0 = none)', u: 'mm', min: 0, max: 12, step: 0.1, d: 1, sub: 'Optional orifice to push more flow through the motor' },
+  { id: 'capBar', g: 'pump', l: 'Radiator cap rating', u: 'bar', min: 0.3, max: 1.6, step: 0.05, d: 2, sub: 'Worst-case swirl pot pressure for the pressure checks (assumed)' },
+  { id: 'minutes', g: 'trans', l: 'Endurance driving time', u: 'min', min: 2, max: 40, step: 1, d: 0 },
+  { id: 'driverChange', g: 'trans', type: 'toggle', l: 'Driver change at halfway (3 min stopped)' },
+  { id: 'fanOnT', g: 'trans', l: 'Fan switches on at radiator inlet', u: '°C', min: 25, max: 95, step: 0.5, d: 1 },
+  { id: 'fanHyst', g: 'trans', l: 'Fan hysteresis', u: '°C', min: 1, max: 10, step: 0.5, d: 1 },
+  { id: 'lapAmp', g: 'trans', l: 'Lap-to-lap load swing', u: '±%', min: 0, max: 60, step: 1, d: 0, scale: 100 },
+  { id: 'volL', g: 'trans', l: 'Coolant volume', u: 'L', min: 1, max: 10, step: 0.1, d: 1, sub: 'Your estimate is 6.9 L; the geometry gives less (see Parts)' },
+  { id: 'metalKg', g: 'trans', l: 'Loop metal in thermal contact', u: 'kg Al', min: 0, max: 10, step: 0.1, d: 1, sub: 'Estimate: radiator, swirl pot, Y fittings, part of the pump' }
+];
+const TABS = [['drive', 'Drive'], ['heat', 'Heat'], ['pump', 'Pump & hoses'], ['trans', 'Transient']];
+let tab = 'drive';
+const rows = {};
+function makeRow(c) {
+  const el = document.createElement('div'); el.def = c;
+  if (c.type === 'toggle') {
+    el.className = 'toggle'; const id = 'tg_' + c.id;
+    el.innerHTML = `<label for="${id}">${c.l}</label><button class="sw" id="${id}" aria-label="${c.l}"></button>`;
+    el.querySelector('button').addEventListener('click', () => { S[c.id] = !S[c.id]; changed(c.id); });
+    el.sync = () => el.querySelector('button').setAttribute('aria-pressed', S[c.id] ? 'true' : 'false');
+  } else if (c.type === 'select') {
+    el.className = 'row'; const id = 'sel_' + c.id;
+    el.innerHTML = `<label for="${id}">${c.l}</label><span></span><select id="${id}" style="grid-column:1/-1">${c.opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+    const s = el.querySelector('select'); s.addEventListener('change', () => { S[c.id] = +s.value; changed(c.id); });
+    el.sync = () => { s.value = String(S[c.id]); };
+  } else {
+    el.className = 'row'; const id = 'n_' + c.id, sc = c.scale || 1, isIn = c.type === 'in';
+    el.innerHTML = `<label for="${id}">${c.l}</label><div class="num"><input id="${id}" inputmode="decimal" autocomplete="off"><em>${isIn ? 'in' : c.u}</em></div><input type="range" aria-label="${c.l}" min="${c.min}" max="${c.max}" step="${c.step}"><div class="sub"></div>`;
+    const num = el.querySelector('.num input'), rng = el.querySelector('input[type=range]'), sub = el.querySelector('.sub');
+    rng.addEventListener('input', () => { S[c.id] = c.scale ? +rng.value / sc : +rng.value; changed(c.id); });
+    if (c.scale) { rng.min = c.min; rng.max = c.max; }
+    const commit = () => {
+      let t = num.value.trim(), v;
+      if (isIn && /\//.test(t)) { const m = t.match(/^(\d+)?\s*(\d+)\/(\d+)/); v = m ? (+(m[1] || 0) + (+m[2]) / (+m[3])) : NaN; } else v = parseFloat(t.replace(/,/g, ''));
+      if (!isFinite(v)) { el.sync(); return; }
+      v = Math.max(c.min, Math.min(c.max, v)); S[c.id] = c.scale ? v / sc : v; changed(c.id);
+    };
+    num.addEventListener('change', commit); num.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commit(); num.blur(); } });
+    el.sync = () => {
+      const v = c.scale ? S[c.id] * sc : S[c.id];
+      rng.value = v; rng.style.setProperty('--p', ((v - c.min) / (c.max - c.min) * 100).toFixed(1) + '%');
+      if (document.activeElement !== num) num.value = isIn ? frac(v).replace('"', '') : fx(v, c.d).replace(/,/g, '');
+      sub.textContent = isIn ? `${fx(v * 25.4, 2)} mm` + (c.id === 'idMotor' ? ' · brief: 7/16"' : c.id === 'idInv' ? ' · brief: 9/16"' : ' · brief: 3/4"') : (c.sub || '');
+      sub.hidden = !sub.textContent;
+    };
+  }
+  (rows[c.id] = rows[c.id] || []).push(el); return el;
+}
+const ctlEls = C.map(makeRow);
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(([k, t]) => `<button role="tab" data-t="${k}" aria-pressed="${k === tab}">${t}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.t; renderTabs(); renderCtl(); }));
+}
+function renderCtl() { const box = $('ctl'); box.innerHTML = ''; ctlEls.forEach((el) => { if (el.def.g === tab) box.appendChild(el); }); syncAll(); }
+function syncAll() { for (const id in rows) for (const el of rows[id]) el.sync(); }
+const PRE = [
+  ['Skidpad', { speed: 35, loadPct: 45, minutes: 2, driverChange: false, lapAmp: 0.1 }],
+  ['Autocross', { speed: 48, loadPct: 70, minutes: 2, driverChange: false, lapAmp: 0.35 }],
+  ['Endurance', { speed: 55, loadPct: 100, minutes: 25, driverChange: true, lapAmp: 0.3 }]
+];
+$('presets').innerHTML = PRE.map(([n], i) => `<button class="btn" data-p="${i}">${n}</button>`).join('') + '<button class="btn" id="reset">Reset</button>';
+const BASE = { fan: true, TaIn: 32.2, alt: 300, Cp: 0.4, qMotor: 3.89, qInv: 0.813, pumpV: 24, fanOnT: 45, fanHyst: 3, orificeMM: 0, capBar: 0.9 };
+$('presets').querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => { Object.assign(S, BASE, PRE[+b.dataset.p][1]); changed('preset'); }));
+$('reset').addEventListener('click', () => { S = { ...DEF }; changed('preset'); });
+
+// ---------- solve ----------
+const runs = hoseRuns();
+let R = null, TR = null, csv = null;
+function solveAll() { R = solveLoop(S, runs); TR = transient(S, R); }
+const hoseT = () => { const T = R.th.T; return { h1: [T.potOut, T.potOut], h2: [T.pumpOut, T.pumpOut], h3m: [T.ySplit, T.ySplit], h4m: [T.motorOut, T.motorOut], h3i: [T.ySplit, T.ySplit], h4i: [T.invOut, T.invOut], h5: [T.yMerge, T.yMerge], h6: [T.radOut, T.radOut] }; };
+const hoseV = () => { const h = R.hyd, o = {}; for (const p of [...h.series.parts, ...h.split.bm.parts, ...h.split.bi.parts]) { const r = runs.find((x) => x.name === p.name); if (r) o[r.id] = p.V; } return o; };
+const lpm = (q) => q / LPM;
+
+// ---------- 3D ----------
+const R3 = new LoopRenderer($('gl'), $('labels'));
+let geoKey = '';
+if (!R3.ok) { $('noGL').hidden = false; $('labels').hidden = true; }
+function update3D() {
+  if (!R3.ok) return;
+  const key = [S.idMain, S.idMotor, S.idInv, S.idReturn].join('|');
+  if (key !== geoKey) {
+    const dim = (inch) => ({ ID: inch * 25.4, OD: (inch + 0.25) * 25.4 });
+    R3.build(runs, { pump: dim(S.idMain), main: dim(S.idReturn), return: dim(S.idReturn), motor: dim(S.idMotor), inv: dim(S.idInv) }, R.rad);
+    geoKey = key;
+  }
+  const T = R.th.T;
+  R3.setState({ Tlo: S.TaIn, Thi: Math.max(T.motorOut, S.TaIn + 10), hoseT: hoseT(), hoseV: hoseV(), rad: { ...R.rad, rows: R.rad.rows }, fanOn: S.fan, potT: T.potIn, radV: R.rad.Vi });
+}
+const segBtn = (a, b, on) => { $(a).setAttribute('aria-pressed', on); if (b) $(b).setAttribute('aria-pressed', !on); };
+$('vStudio').onclick = () => { R3.thermal = 0; segBtn('vStudio', 'vThermal', true); };
+$('vThermal').onclick = () => { R3.thermal = 1; segBtn('vThermal', 'vStudio', true); };
+$('vCut').onclick = () => { R3.cut = !R3.cut; segBtn('vCut', null, R3.cut); };
+$('vFlow').onclick = () => { R3.flow = !R3.flow; segBtn('vFlow', null, R3.flow); };
+$('vSpin').onclick = () => { R3.autoSpin = !R3.autoSpin; segBtn('vSpin', null, R3.autoSpin); };
+$('vEx').oninput = (e) => { R3.explode = +e.target.value; e.target.style.setProperty('--p', (+e.target.value * 100) + '%'); };
+$('vEx').style.setProperty('--p', '0%');
+R3.onSpin = (v) => segBtn('vSpin', null, v);
+$('vFocus').onchange = (e) => { R3.focus(e.target.value); if (e.target.value !== 'loop' && R3.autoSpin) { R3.autoSpin = false; segBtn('vSpin', null, false); } };
+R3.onFocus = (k) => { $('vFocus').value = k; };
+$('infoX').onclick = () => { $('info').hidden = true; R3.sel = null; };
+
+// ---------- part info ----------
+function partInfo(part) {
+  const T = R.th.T, h = R.hyd, pr = R.pressures, qm = lpm(h.split.qm), qi = lpm(h.split.qi), Q = h.QL;
+  const sp = GEO.pot, IN = 25.4;
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  const hoseInfo = (id) => { const r = runs.find((x) => x.id === id), p = [...h.series.parts, ...h.split.bm.parts, ...h.split.bi.parts].find((x) => x.name === r.name), Tm = hoseT()[id][0];
+    const idIn = r.line === 'motor' ? S.idMotor : r.line === 'inv' ? S.idInv : r.line === 'pump' ? S.idMain : S.idReturn;
+    return { name: r.name, mat: 'Clear PVC tubing, plastic hose clamps (rule EV.7.7.1 per brief)', dims: `${frac(idIn)} ID × ${fx(r.L, 0)} mm routed`, mount: 'Barbed both ends, plastic clamps', live: [['Coolant', fx(Tm, 1) + ' °C'], ['Flow', fx(r.line === 'motor' ? qm : r.line === 'inv' ? qi : Q, 2) + ' L/min'], ['Velocity', fx(p.V, 2) + ' m/s'], ['Re', fx(p.Re, 0)], ['ΔP', fx(p.dp / 1000, 2) + ' kPa']] }; };
+  const I = {
+    pot: { name: 'Swirl pot V3 (header)', mat: 'Aluminium, 1/16" wall, TIG welded', dims: `${fx(2.5, 2)}" ID / ${fx(2.625, 3)}" OD × 4.0" body, 25° cone, 2.0" drop to 5/8" ID outlet; ${fx(R.potV.body + R.potV.cone, 3)} L inside`, mount: 'Band clamp to a 1" frame tab, highest point of the loop', live: [['Inlet (return)', fx(T.potIn, 1) + ' °C'], ['Outlet', fx(T.potOut, 1) + ' °C'], ['Pressure (cap)', fx(S.capBar, 2) + ' bar g'], ['Inlet tube velocity', fx(hoseV().h6, 2) + ' m/s']] },
+    pump: { name: 'Davies Craig EBP40 24 V (#9041)', mat: 'PPS/PA66 body, brushless magnetic-drive motor', dims: '3/4" (19 mm) barbs, 570 g; envelope approximate', mount: 'Bracket to 1" frame tab with rubber isolators', live: [['Flow', fx(Q, 2) + ' L/min'], ['Head', fx(h.H / 1000, 1) + ' kPa'], ['Voltage', fx(S.pumpV, 1) + ' V'], ['Inlet pressure', fx(pr.pumpIn / 1e5, 2) + ' bar g'], ['Outlet pressure', fx(pr.pumpOut / 1e5, 2) + ' bar g']] },
+    ysplit: { name: 'Y fitting, split', mat: 'Aluminium', dims: '2.98 × 3.54 × 1.5 in; 3/4" trunk, 9/16" inverter leg, 7/16" motor leg', mount: 'Hose-supported, cable-tied to frame', live: [['In', fx(Q, 2) + ' L/min'], ['To motor', fx(qm, 2) + ' L/min'], ['To inverter', fx(qi, 2) + ' L/min'], ['Pressure', fx(pr.ySplit / 1e5, 2) + ' bar g']] },
+    ymerge: { name: 'Y fitting, merge', mat: 'Aluminium', dims: '2.98 × 3.54 × 1.5 in; legs 7/16" and 9/16" in, 3/4" out', mount: 'Hose-supported', live: [['Mixed temperature', fx(T.yMerge, 1) + ' °C'], ['Out', fx(Q, 2) + ' L/min'], ['Pressure', fx(pr.yMerge / 1e5, 2) + ' bar g']] },
+    motor: { name: 'EMRAX 228 High Voltage, combined cooled', mat: 'Aluminium housing; stator liquid-cooled, rotor air-cooled', dims: 'Ø228 × 86 mm, 12.9–13.5 kg (datasheet v1.7); 10 mm ports', mount: 'Motor plate to frame', live: [['Coolant in', fx(T.motorIn, 1) + ' °C (max 50)'], ['Coolant out', fx(T.motorOut, 1) + ' °C'], ['Flow', fx(qm, 2) + ' L/min (6–11)'], ['Jacket ΔP', fx(h.split.bm.parts.find((p) => p.comp).dp / 1e5, 3) + ' bar'], ['Heat to coolant', fx(R.th.Qm / 1000, 2) + ' kW'], ['Rotor heat to air', fx(S.qRotor * S.loadPct / 100, 2) + ' kW']] },
+    inv: { name: 'DTI HV-500LC inverter', mat: 'Aluminium housing with integrated cold plate, 14 mm ports', dims: '77 × 213 × 420 mm, 6.7 kg (DTI technical description, beta)', mount: 'Two tabs to frame', live: [['Coolant in', fx(T.invIn, 1) + ' °C (max 60)'], ['Coolant out', fx(T.invOut, 1) + ' °C'], ['Flow', fx(qi, 2) + ' L/min'], ['Cold plate ΔP', fx(h.split.bi.parts.find((p) => p.comp && !p.name.startsWith('Restrictor')).dp / 1e5, 3) + ' bar (check datasheet)'], ['Inlet pressure', fx(pr.invIn / 1e5, 2) + ' bar g (max 2)']] },
+    radiator: { name: 'Radiator, single pass, side tanks', mat: 'Aluminium core 20 FPI louvered fins, welded side tanks, no reservoir', dims: '11.75 × 4.875 × 3.8 in overall; core 9.25 × 4.5 × 2.0 in; ~1.0 L, ~3.0 kg', mount: 'Lower tabs on rubber isolators to the frame rail', live: [['In', fx(T.radIn, 1) + ' °C'], ['Out', fx(T.radOut, 1) + ' °C'], ['Heat out', fx(R.rad.Q / 1000, 2) + ' kW'], ['Face velocity', fx(R.Vf, 2) + ' m/s'], ['Air ΔP', fx(R.rad.dPair, 0) + ' Pa'], ['Coolant ΔP', fx(R.rad.dPcool / 1000, 2) + ' kPa']] },
+    shroud: { name: 'Fan shroud', mat: '3D printed ASA / ABS / Nylon / CF-Nylon', dims: `Lofts the 9.25 × 4.5 in core face to the Ø184 mm fan over ${GEO.shroudLen} mm (length assumed)`, mount: 'Bonded or bolted to the radiator core flange; fan bolts to it', live: [['Air through it', fx(R.Vf * 0.02688, 3) + ' m³/s']] },
+    fan: { name: 'SPAL VA22-BP11/C-50S', mat: 'Nylon housing and blades', dims: 'Ø184 mm housing, 52.1 mm deep, 4 × Ø6.5 holes on 135 mm square; 1.3 kg', mount: '4 bolts to the shroud', live: [['State', S.fan ? 'On' : 'Off'], ['Air flow', fx(R.Vf * 0.02688, 3) + ' m³/s'], ['Fan pressure at that flow', S.fan ? fx(spalDP(R.Vf * 0.02688), 0) + ' Pa' : '–']] },
+    can: { name: 'Coolant catch can', mat: 'Aluminium', dims: `Ø3.5 × 7 in (assumed size), ${fx(R.canL, 2)} L capacity; 0.3 kg`, mount: 'Band clamp to frame', live: [['Capacity needed', fx(Math.max(0.9, 0.1 * S.volL), 2) + ' L (10% or 0.9 L)'], ['Vent', 'Hose ≥ 3 mm ID to the chassis bottom']] },
+    lines: { name: 'Bleed / overflow line and catch-can vent', mat: 'Clear tubing', dims: 'From the radiator cap neck nipple on top of the swirl pot (the highest point) across to the catch can; can vents down to the chassis bottom (≥ 3 mm ID, T.5.6.4)', mount: 'Clamped', live: [['Purpose', 'Air collected in the swirl pot and expansion overflow leave here']] },
+    frame: { name: 'Frame tubes', mat: '1" OD steel tube', dims: 'Simplified bay around the cooling package', mount: 'Welded 1" and 2" tabs', live: [] },
+    mounts: { name: 'Tabs, isolators and bolts', mat: 'Steel tabs (1" and 2"), rubber isolators', dims: 'Welded to frame tubes', mount: 'Bolted through isolators', live: [] }
+  };
+  if (/^h\d/.test(part)) return hoseInfo(part);
+  return I[part];
+}
+R3.onPick = (part) => {
+  if (!part) { $('info').hidden = true; return; }
+  const p = partInfo(part); if (!p) { $('info').hidden = true; return; }
+  $('iName').textContent = p.name;
+  $('iBody').innerHTML = `<dl><dt>Material</dt><dd>${esc(p.mat)}</dd><dt>Size</dt><dd>${esc(p.dims)}</dd><dt>Mounting</dt><dd>${esc(p.mount)}</dd>${p.live.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  $('info').hidden = false; $('info').dataset.part = part;
+};
+
+// ---------- charts ----------
+function chart(svg, cfg) { svg._cfg = cfg; if (!svg._ro) { svg._ro = new ResizeObserver(() => drawChart(svg)); svg._ro.observe(svg); } drawChart(svg); }
+function drawChart(svg) {
+  const c = svg._cfg; if (!c) return; const W = svg.clientWidth, H = svg.clientHeight; if (!W || !H) return;
+  const m = { l: 52, r: 18, t: 16, b: 40 };
+  const all = c.series.flatMap((s) => s.pts);
+  const x0 = c.x0 ?? Math.min(...all.map((p) => p[0])), x1 = c.x1 ?? Math.max(...all.map((p) => p[0]));
+  let y0 = c.y0 ?? Math.min(0, ...all.map((p) => p[1])), y1 = c.y1 ?? Math.max(...all.map((p) => p[1]), ...(c.hlines || []).map((h) => h.y)) * 1.08;
+  const nice = (v) => { const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; };
+  const ys = nice((y1 - y0) / 5 || 1); y0 = Math.floor(y0 / ys) * ys; y1 = Math.ceil(y1 / ys) * ys;
+  const xs = nice((x1 - x0) / (W < 460 ? 4 : 8) || 1);
+  const X = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  let s = '';
+  for (const b of c.bands || []) s += `<rect x="${X(cl(b.x0, x0, x1))}" y="${b.top ? H - m.b - 8 : m.t}" width="${Math.max(0, X(cl(b.x1, x0, x1)) - X(cl(b.x0, x0, x1)))}" height="${b.top ? 8 : H - m.t - m.b}" fill="${b.color}" opacity="${b.op ?? 0.12}"/>`;
+  for (let v = y0; v <= y1 + 1e-9; v += ys) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#2b3748" stroke-opacity=".7"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${fx(v, ys < 1 ? 1 : 0)}</text>`;
+  for (let v = Math.ceil(x0 / xs) * xs; v <= x1 + 1e-9; v += xs) s += `<text x="${X(v)}" y="${H - m.b + 18}" text-anchor="middle">${fx(v, xs < 1 ? 1 : 0)}</text>`;
+  s += `<text x="${W - m.r}" y="${H - 4}" text-anchor="end">${c.xl}</text><text x="${m.l - 8}" y="${m.t - 4}" text-anchor="start" style="font-size:12px">${c.yl}</text>`;
+  for (const h of c.hlines || []) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color}" stroke-dasharray="5 5" stroke-width="1.3"/><text x="${m.l + 6}" y="${Y(h.y) - 6}" text-anchor="start" style="fill:${h.color}">${h.label}</text>`;
+  for (const v of c.vlines || []) s += `<line x1="${X(v.x)}" x2="${X(v.x)}" y1="${m.t}" y2="${H - m.b}" stroke="${v.color}" stroke-dasharray="4 4"/><text x="${X(v.x) + 5}" y="${m.t + 14}" style="fill:${v.color}">${v.label}</text>`;
+  for (const sr of c.series) {
+    const pts = sr.pts.filter((p) => isFinite(p[1]) && p[0] >= x0 && p[0] <= x1);
+    if (pts.length < 2) continue;
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(cl(p[1], y0, y1)).toFixed(1)).join('');
+    s += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="${sr.w || 2.4}" stroke-linejoin="round"${sr.dash ? ` stroke-dasharray="${sr.dash}"` : ''}/>`;
+    if (sr.name) { const p = pts[sr.at != null ? Math.min(pts.length - 1, Math.floor(pts.length * sr.at)) : pts.length - 1]; s += `<text x="${Math.min(W - m.r - 4, X(p[0]))}" y="${Y(cl(p[1], y0, y1)) + (sr.below ? 18 : -8)}" text-anchor="end" style="fill:${sr.color}">${sr.name}</text>`; }
+  }
+  for (const k of c.marks || []) s += `<circle cx="${X(k.x)}" cy="${Y(k.y)}" r="6.5" fill="${k.color}" stroke="#0b0e13" stroke-width="3"/>${k.label ? `<text x="${X(k.x) + 10}" y="${Y(k.y) + (k.dy || -10)}" style="fill:${k.color}">${k.label}</text>` : ''}`;
+  svg.innerHTML = s;
+}
+function charts() {
+  const h = R.hyd, Q = h.QL;
+  const pts = (f, a, b, n = 60) => Array.from({ length: n + 1 }, (_, i) => { const x = a + (b - a) * i / n; return [x, f(x)]; });
+  const qmax = Math.max(40, PUMP.Qmax * S.pumpV / 24 * 1.05);
+  const pump = pts((q) => pumpH(q, S.pumpV) / 1000, 0, Math.min(qmax, PUMP.Qmax * S.pumpV / 24), 60);
+  const sys = pts((q) => h.sysFn(q) / 1000, 0.2, qmax, 40);
+  const ser = [{ pts: sys, color: '#3fa7d6', name: 'system', at: 0.85 }, { pts: pump, color: '#ef2b36', name: `pump at ${fx(S.pumpV, 1)} V`, at: 0.35 }];
+  if (Math.abs(S.pumpV - 24) > 0.05) ser.unshift({ pts: pts((q) => pumpH(q, 24) / 1000, 0, 37, 50), color: '#5d6b7e', name: '24 V', dash: '4 4', w: 1.5, at: 0.2 });
+  chart($('c1'), { series: ser, x0: 0, x1: qmax, y0: 0, y1: Math.max(90, pumpH(0, S.pumpV) / 1000 * 1.1), xl: 'total flow, L/min', yl: 'kPa', marks: [{ x: Q, y: h.H / 1000, color: '#ef2b36', label: `${fx(Q, 1)} L/min at ${fx(h.H / 1000, 1)} kPa`, dy: -12 }], vlines: [{ x: 28, color: '#93a1b3', label: 'target 28' }] });
+  $('c1n').textContent = `The pump settles at ${fx(Q, 1)} L/min and ${fx(h.H / 1000, 1)} kPa. ${Q < 28 ? `That is ${fx(28 - Q, 1)} L/min short of your 28 L/min target: the system curve crosses the pump curve before 28.` : 'That meets your 28 L/min target.'} The upper part of the pump curve between shut-off and 35.5 L/min is interpolated.`;
+  const net = h.net, w = h.w;
+  const bm = pts((q) => branchDP(net, 'motor', q * LPM, w).dp / 1000, 0, 16, 50), bi = pts((q) => branchDP(net, 'inv', q * LPM, w).dp / 1000, 0, 32, 50);
+  const dp = h.split.dp / 1000, qm = lpm(h.split.qm), qi = lpm(h.split.qi);
+  chart($('c2'), { series: [{ pts: bm, color: '#f39a3b', name: 'motor leg', at: 0.6 }, { pts: bi, color: '#8ce0d1', name: 'inverter leg', at: 0.9 }], x0: 0, x1: 32, y0: 0, y1: Math.max(dp * 2.2, 40), xl: 'branch flow, L/min', yl: 'kPa', bands: [{ x0: 6, x1: 11, color: '#3ccf91', op: 0.1 }], hlines: [{ y: dp, color: '#e9eef4', label: `shared ΔP ${fx(dp, 1)} kPa` }], marks: [{ x: qm, y: dp, color: '#f39a3b', label: `motor ${fx(qm, 2)}`, dy: 22 }, { x: qi, y: dp, color: '#8ce0d1', label: `inverter ${fx(qi, 2)}`, dy: 22 }] });
+  $('c2n').textContent = `Both legs drop ${fx(dp, 1)} kPa (mismatch ${fx(h.split.mismatch, 3)} Pa). The motor jacket (0.5 bar at 6 L/min) is far stiffer than the inverter plate, so the motor gets ${fx(qm, 2)} L/min and the inverter ${fx(qi, 2)}. Green band: EMRAX 6–11 L/min.`;
+  // transient
+  const P = TR.pts, mins = (t) => t / 60;
+  const tser = [
+    { pts: P.map((p) => [mins(p.t), p.motorOut]), color: '#f39a3b', name: 'motor out', w: 1.6, at: 0.95 },
+    { pts: P.map((p) => [mins(p.t), p.radIn]), color: '#ef2b36', name: 'radiator in', at: 0.75 },
+    { pts: P.map((p) => [mins(p.t), p.invOut]), color: '#8ce0d1', name: 'inverter out', w: 1.8, at: 0.55, below: true },
+    { pts: P.map((p) => [mins(p.t), p.motorIn]), color: '#e9eef4', name: 'motor in', at: 0.35, below: true }
+  ];
+  const bands = [];
+  let st = null; for (const p of P) { if (p.fan && st === null) st = p.t; if (!p.fan && st !== null) { bands.push({ x0: mins(st), x1: mins(p.t), color: '#3fa7d6', op: 0.7, top: true }); st = null; } }
+  if (st !== null) bands.push({ x0: mins(st), x1: mins(P[P.length - 1].t), color: '#3fa7d6', op: 0.7, top: true });
+  if (TR.chg) bands.push({ x0: mins(TR.chg[0]), x1: mins(TR.chg[1]), color: '#93a1b3', op: 0.1 });
+  if (csv) { const c = [['motor', '#e9eef4'], ['inv', '#8ce0d1'], ['radIn', '#ef2b36']]; for (const [k, col] of c) if (csv[k]) tser.push({ pts: csv[k], color: col, dash: '3 4', w: 1.6, name: 'MoTeC ' + ({ motor: 'motor', inv: 'inverter', radIn: 'radiator in' })[k], at: 0.98, below: true }); }
+  const tmax = Math.max(...P.map((p) => p.motorOut));
+  chart($('c3'), { series: tser, x0: 0, x1: mins(P[P.length - 1].t), y0: Math.floor(S.TaIn / 10) * 10, y1: Math.min(Math.max(70, tmax + 5, tsat(S) + 8), 200), xl: 'minutes', yl: '°C', bands, hlines: [{ y: 50, color: '#ff6a6f', label: 'motor inlet limit 50' }, { y: 60, color: '#f3b13c', label: 'inverter coolant max 60' }, { y: tsat(S), color: '#c77dff', label: `boils ≈${fx(tsat(S), 0)} at cap` }] });
+  const end = P[P.length - 1], cross50 = P.find((p) => p.motorIn > 50);
+  $('c3n').innerHTML = `Lumped estimate, thermal mass ${fx(TR.C / 1000, 1)} kJ/°C. Motor inlet ends at <b>${fx(end.motorIn, 1)} °C</b> after ${fx(mins(end.t), 0)} min${cross50 ? `, crossing 50 °C at ${fx(mins(cross50.t), 1)} min` : ', never crossing 50 °C'}. Blue strip at the bottom: fan running. ${TR.chg ? 'Grey band: driver change, car stopped, pump and fan still on.' : ''}`;
+}
+
+// ---------- schematic ----------
+function schematic() {
+  const svg = $('schem'); svg._draw = () => {
+    const W = svg.clientWidth, H = svg.clientHeight; if (!W || !H) return;
+    const T = R.th.T, h = R.hyd, pr = R.pressures, qm = lpm(h.split.qm), qi = lpm(h.split.qi), narrow = W < 520;
+    const cx = W * (narrow ? 0.44 : 0.42), xl = W * (narrow ? 0.2 : 0.2), xr = W * (narrow ? 0.68 : 0.64), xret = W * (narrow ? 0.93 : 0.9);
+    const y = (f) => 24 + f * (H - 48);
+    const tcol = (Tv) => { const t = Math.max(0, Math.min(1, (Tv - S.TaIn) / Math.max(1, T.motorOut - S.TaIn))); const st = ['#2994db', '#8ce0d1', '#fae073', '#f58c33', '#db2133']; const k = t * 4, i = Math.min(3, Math.floor(k)), f = k - i; const a = st[i], b = st[i + 1]; const m = (j) => Math.round(parseInt(a.slice(j, j + 2), 16) * (1 - f) + parseInt(b.slice(j, j + 2), 16) * f); return `rgb(${m(1)},${m(3)},${m(5)})`; };
+    const box = (x, yy, w, hh, title, lines, Tv, warn) => `<g><rect x="${x - w / 2}" y="${yy - hh / 2}" width="${w}" height="${hh}" rx="10" fill="#0d1218" stroke="${warn ? '#ff6a6f' : '#33425a'}" stroke-width="${warn ? 2 : 1}"/><rect x="${x - w / 2}" y="${yy - hh / 2}" width="5" height="${hh}" rx="2" fill="${Tv != null ? tcol(Tv) : '#33425a'}"/><text x="${x - w / 2 + 14}" y="${yy - hh / 2 + 20}" style="fill:#e9eef4;font-weight:600">${title}</text>${lines.map((l, i) => `<text x="${x - w / 2 + 14}" y="${yy - hh / 2 + 39 + i * 17}">${l}</text>`).join('')}</g>`;
+    const pipe = (pts, Tv, wd, dash) => `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join('')}" fill="none" stroke="${Tv != null ? tcol(Tv) : '#93a1b3'}" stroke-width="${wd}" stroke-linejoin="round" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+    const lab = (x, yy, t, anchor = 'start') => `<text x="${x}" y="${yy}" text-anchor="${anchor}" style="fill:#c3cdd9">${t}</text>`;
+    const bw = narrow ? Math.min(150, W * 0.4) : Math.min(210, W * 0.34), bh = 64;
+    const Y = { pot: y(0.06), pump: y(0.2), ys: y(0.33), comp: y(0.5), ym: y(0.66), rad: y(0.8), fan: y(0.94) };
+    let s = '';
+    const wMain = 6, wM = 3.5, wI = 5;
+    s += pipe([[cx, Y.pot], [cx, Y.pump]], T.potOut, wMain) + pipe([[cx, Y.pump], [cx, Y.ys]], T.pumpOut, wMain);
+    s += pipe([[cx, Y.ys], [xl, Y.ys + 30], [xl, Y.comp]], T.ySplit, wM) + pipe([[cx, Y.ys], [xr, Y.ys + 30], [xr, Y.comp]], T.ySplit, wI);
+    s += pipe([[xl, Y.comp], [xl, Y.ym - 30], [cx, Y.ym]], T.motorOut, wM) + pipe([[xr, Y.comp], [xr, Y.ym - 30], [cx, Y.ym]], T.invOut, wI);
+    s += pipe([[cx, Y.ym], [cx, Y.rad]], T.yMerge, wMain);
+    s += pipe([[cx + bw / 2, Y.rad + 14], [xret, Y.rad + 14], [xret, Y.pot - 10], [cx + bw / 2, Y.pot - 10]], T.radOut, wMain);
+    s += pipe([[cx - bw / 2, Y.pot - 14], [cx - bw / 2 - 60, Y.pot - 14]], null, 2, '4 5') + `<text x="${cx - bw / 2 - 66}" y="${Y.pot - 10}" text-anchor="end">bleed → catch can</text>`;
+    s += box(cx, Y.pot, bw, bh, 'Swirl pot (highest)', [`${fx(T.potIn, 1)} °C · cap ${fx(S.capBar, 2)} bar → catch can`], T.potIn);
+    s += box(cx, Y.pump, bw, bh, 'Pump EBP40', [`${fx(h.QL, 1)} L/min · +${fx(h.H / 1000, 1)} kPa`], T.pumpOut);
+    s += box(cx, Y.ys, bw * 0.7, 46, 'Y split', [], T.ySplit);
+    s += box(xl, Y.comp, bw, bh + 18, 'Motor EMRAX 228', [`${fx(T.motorIn, 1)} → ${fx(T.motorOut, 1)} °C`, `${fx(qm, 2)} L/min`], T.motorOut, T.motorIn > 50 || qm < 6 || qm > 11);
+    s += box(xr, Y.comp, bw, bh + 18, 'Inverter HV-500LC', [`${fx(T.invIn, 1)} → ${fx(T.invOut, 1)} °C`, `${fx(qi, 2)} L/min`], T.invOut, T.invIn > 60 || pr.invIn > 2e5);
+    s += box(cx, Y.ym, bw * 0.7, 46, 'Y merge', [], T.yMerge);
+    s += box(cx, Y.rad, bw, bh, 'Radiator', [`${fx(T.radIn, 1)} → ${fx(T.radOut, 1)} °C · ${fx(R.rad.Q / 1000, 2)} kW`], T.radIn);
+    s += box(cx, Y.fan, bw, 46, 'Fan + shroud (lowest)', [], null).replace('</text></g>', ` · ${S.fan ? 'on' : 'off'}</text></g>`);
+    s += lab(xret - 6, (Y.rad + Y.pot) / 2, `return ${fx(h.QL, 1)} L/min`, 'end');
+    s += lab(xl - 6, Y.ys + 60, frac(S.idMotor), 'end') + lab(xr + 8, Y.ys + 60, frac(S.idInv), 'start');
+    svg.innerHTML = s;
+  };
+  if (!svg._ro) { svg._ro = new ResizeObserver(() => svg._draw()); svg._ro.observe(svg); }
+  svg._draw();
+}
+
+// ---------- tables & flags ----------
+function tables() {
+  const T = R.th.T, pr = R.pressures, h = R.hyd;
+  const nodes = [['Swirl pot outlet', T.potOut, pr.pot], ['Pump outlet', T.pumpOut, pr.pumpOut], ['Y split', T.ySplit, pr.ySplit], ['Motor inlet', T.motorIn, pr.motorIn], ['Motor outlet', T.motorOut, null], ['Inverter inlet', T.invIn, pr.invIn], ['Inverter outlet', T.invOut, null], ['Y merge (mixed)', T.yMerge, pr.yMerge], ['Radiator inlet', T.radIn, pr.radIn], ['Radiator outlet', T.radOut, pr.radOut], ['Swirl pot inlet (return)', T.potIn, null]];
+  $('nodeT').innerHTML = `<thead><tr><th>Node</th><th class="n">°C</th><th class="n">bar g</th></tr></thead><tbody>${nodes.map(([n, t, p]) => `<tr><td>${n}</td><td class="n">${fx(t, 1)}</td><td class="n">${p == null ? '' : fx(p / 1e5, 2)}</td></tr>`).join('')}</tbody>`;
+  const b = R.th.balance;
+  $('balNote').textContent = `Energy balance: ${fx(b.Qload / 1000, 3)} kW in (motor ${fx(R.th.Qm / 1000, 2)} + inverter ${fx(R.th.Qi / 1000, 3)}), ${fx(b.Qrad / 1000, 3)} kW out of the radiator, error ${fx(b.err * 100, 3)} %. Pressures assume the swirl pot is at the ${fx(S.capBar, 2)} bar cap rating (worst case, hot).`;
+  const r = R.rad;
+  const rr = [['Face velocity (fan curve + ram)', fx(R.Vf, 2) + ' m/s'], ['Air mass flow', fx(r.mA * 1000, 1) + ' g/s'], ['Re<sub>Lp</sub> / j / f', `${fx(r.ReLp, 0)} / ${fx(r.j, 4)} / ${fx(r.f, 3)}`], ['Air-side h, fin efficiency', `${fx(r.hA, 0)} W/m²K, ${fx(r.etaF, 3)}`], ['Coolant Re, h', `${fx(r.Rei, 0)}, ${fx(r.hi, 0)} W/m²K`], ['UA / NTU / ε', `${fx(r.UA, 1)} W/K / ${fx(r.NTU, 2)} / ${fx(r.eps, 3)}`], ['Air ΔP / coolant ΔP', `${fx(r.dPair, 0)} Pa / ${fx(r.dPcool / 1000, 2)} kPa`], ['Heat per °C (inlet − ambient)', fx(r.Q / Math.max(0.1, T.radIn - S.TaIn), 1) + ' W/°C']];
+  $('radT').innerHTML = `<tbody>${rr.map(([k, v]) => `<tr><td>${k}</td><td class="n">${v}</td></tr>`).join('')}</tbody>`;
+  const all = [...h.series.parts.map((p) => ['Series', p]), ...h.split.bm.parts.map((p) => ['Motor leg', p]), ...h.split.bi.parts.map((p) => ['Inverter leg', p])];
+  $('dpT').innerHTML = `<thead><tr><th>Path</th><th>Element</th><th class="n">V, m/s</th><th class="n">Re</th><th class="n">K</th><th class="n">ΔP, kPa</th></tr></thead><tbody>${all.map(([g, p]) => `<tr><td>${g}</td><td>${esc(p.name)}${p.comp ? (p.name.startsWith('HV') ? '<span class="est">datasheet check</span>' : p.name.startsWith('EMRAX') ? '<span class="est">∝ Q² assumed</span>' : '') : ''}</td><td class="n">${p.V != null ? fx(p.V, 2) : ''}</td><td class="n">${p.Re != null ? fx(p.Re, 0) : ''}</td><td class="n">${p.K != null ? fx(p.K, 2) : ''}</td><td class="n">${fx(p.dp / 1000, 2)}</td></tr>`).join('')}<tr><td></td><td><b>Pump head = series + branch</b></td><td></td><td></td><td></td><td class="n"><b>${fx(h.H / 1000, 2)} = ${fx(h.series.dp / 1000, 2)} + ${fx(h.split.dp / 1000, 2)}</b></td></tr></tbody>`;
+  // parts & volume
+  const water = S.volL * 0.99;
+  const P = [['Radiator (core 9.25 × 4.5 × 2.0 in, 20 FPI)', 3.0], ['Fan SPAL VA22-BP11/C-50S', 1.3], ['Pump Davies Craig EBP40 24 V', 0.57], ['Swirl pot V3', 0.3], ['Catch can', 0.3], ['Hoses, clamps, Y fittings, sensors', 0.5], ['Coolant (water, at your volume)', water]];
+  const tot = P.reduce((a, p) => a + p[1], 0);
+  $('partsT').innerHTML = `<thead><tr><th>Part</th><th class="n">kg</th></tr></thead><tbody>${P.map(([n, m]) => `<tr><td>${n}</td><td class="n">${fx(m, 2)}</td></tr>`).join('')}<tr><td><b>Cooling system, wet</b></td><td class="n"><b>${fx(tot, 2)}</b></td></tr><tr><td style="color:var(--mute)">Not counted: EMRAX 228 (12.9–13.5 kg), HV-500 (6.7 kg), 3D-printed shroud, frame tabs</td><td></td></tr></tbody>`;
+  const v = R.volGeomL;
+  const V = [['Hoses (from routed lengths and IDs)', v.hoses], ['Swirl pot incl. outlet nipple bore', v.pot], ['Radiator', v.radiator], ['Motor jacket', v.motor], ['Inverter cold plate', v.inverter], ['Pump (estimate)', v.pump], ['Y fittings (estimate)', v.yFittings]];
+  $('volT').innerHTML = `<tbody>${V.map(([n, x]) => `<tr><td>${n}</td><td class="n">${fx(x, 3)} L</td></tr>`).join('')}<tr><td><b>Geometry total</b></td><td class="n"><b>${fx(v.total, 2)} L</b></td></tr><tr><td>Your estimate (used in the transient)</td><td class="n">${fx(S.volL, 1)} L</td></tr><tr><td>Catch can capacity (Ø3.5 × 7 in, assumed)</td><td class="n">${fx(R.canL, 2)} L</td></tr><tr><td>Catch can required (10% of fluid or 0.9 L)</td><td class="n">${fx(Math.max(0.9, 0.1 * S.volL), 2)} L</td></tr></tbody>`;
+  const sp = GEO.pot;
+  $('potT').innerHTML = `<tbody><tr><td>Straight body: π · (1.25 in)² · 4.0 in</td><td class="n">${fx(R.potV.body, 3)} L</td></tr><tr><td>Cone frustum: π·h/3·(R² + Rr + r²), h 2.0 in, R 1.25 in, r 0.3125 in</td><td class="n">${fx(R.potV.cone, 3)} L</td></tr><tr><td><b>Swirl pot internal volume</b></td><td class="n"><b>${fx(R.potV.body + R.potV.cone, 3)} L</b></td></tr><tr><td>Cone half-angle from the dimensions</td><td class="n">${fx(Math.atan((sp.ri - sp.outRi) / sp.cone) * 180 / Math.PI, 1)}°</td></tr></tbody>`;
+}
+function flags() {
+  const fmt = (c) => typeof c.value === 'number' ? fx(c.value, Math.abs(c.value) < 10 ? 2 : 1) : c.value;
+  const unit = (l) => /temp|inlet$|coolant/i.test(l) && !/pressure/i.test(l) ? ' °C' : /flow|target/i.test(l) ? ' L/min' : /pressure|head/i.test(l) ? ' bar' : /Velocity/.test(l) ? ' m/s' : /balance/.test(l) ? ' %' : '';
+  const out = R.checks.map((c) => `<div class="flag ${c.ok ? 'ok' : ''}"><span><b>${c.ok ? 'OK' : 'Over limit'}:</b> ${esc(c.label)} — ${fmt(c)}${unit(c.label)} vs ${esc(String(c.limit))}${unit(c.label)}</span><span class="m">margin ${typeof c.margin === 'number' ? fx(c.margin, 2) : c.margin}</span><small>${esc(c.note)}</small></div>`);
+  const info = [
+    ['Catch can rule', `FSAE rule T.5.6.1 (2021 edition) requires a cooling-system catch can of at least 10% of the fluid or 0.9 L, whichever is greater: ${fx(Math.max(0.9, 0.1 * S.volL), 2)} L here. The modelled can holds ${fx(R.canL, 2)} L (size assumed). T.5.6.2 lists 0.5 L for vents on other systems including an electric motor. Confirm against the 2026 rulebook.`],
+    ['Inverter ΔP needs a datasheet check', 'HV-500LC pressure drop uses 0.05 bar at 11.67 L/min scaled with flow², from the brief.'],
+    ['Motor ΔP scaling assumed', 'EMRAX 228 jacket uses 0.5 bar at 6 L/min scaled with flow²; real jackets often scale between Q^1.75 and Q².'],
+    ['Pump voltage range', 'The brief lists 12–28 V; one retailer listing gives 20–27 V operating and 250 kPa burst pressure. Curves away from 24 V use affinity laws and are estimates.'],
+    ['Pump curve interpolated', 'Only shut-off (0.85 bar), 35.5 L/min at 10 kPa and 37 L/min free flow are given; the curve between is a quadratic fit through those points.'],
+    ['Coolant volume', `Geometry gives ${fx(R.volGeomL.total, 2)} L vs your 6.9 L estimate. The transient uses ${fx(S.volL, 1)} L; a smaller volume heats faster.`],
+    ['Radiator tank depth assumed', 'Side tanks are modelled 3.8 in deep to match the 11.75 × 4.875 × 3.8 in overall size; nipples: inlet up from the left tank top, outlet out of the right tank bottom.'],
+    ['Coolant', 'Plain water, no additives (FSAE 2026 rule per brief).']
+  ];
+  const bad = R.checks.filter((c) => !c.ok).length;
+  $('chkH').textContent = bad ? `${bad} check${bad > 1 ? 's' : ''} over limit at these settings` : 'Every limit check passes at these settings';
+  $('flags').innerHTML = [...out.filter((x) => !x.includes('flag ok')), ...info.map(([a, b]) => `<div class="flag cfm"><span><b>Confirm:</b> ${esc(a)}</span><span></span><small>${esc(b)}</small></div>`), ...out.filter((x) => x.includes('flag ok'))].join('');
+}
+function headline() {
+  const T = R.th.T, h = R.hyd, qm = lpm(h.split.qm), load = R.th.balance.Qload / 1000;
+  $('bT').innerHTML = `${fx(T.motorIn, 1)}<small>°C</small>`;
+  const over = T.motorIn - 50;
+  $('stat').innerHTML = R.th.ok ? (over > 0 ? `<b class="bad">${fx(over, 1)} °C over</b> the EMRAX 50 °C inlet limit` : `<b class="good">${fx(-over, 1)} °C under</b> the 50 °C inlet limit`) + ` · radiator carries about <b>${fx(R.maxLoadKW, 2)} kW</b> at a 50 °C motor inlet` : '<b class="bad">No steady state</b>: the radiator cannot reject this load';
+  $('fQ').textContent = fx(h.QL, 1) + ' L/min'; $('fH').textContent = fx(h.H / 1000, 1) + ' kPa'; $('fQm').textContent = fx(qm, 2) + ' L/min'; $('fQi').textContent = fx(lpm(h.split.qi), 2) + ' L/min';
+  $('fR').textContent = fx(R.rad.Q / 1000, 2) + ' kW'; $('fV').textContent = fx(R.Vf, 2) + ' m/s';
+  $('fQm').className = qm < 6 || qm > 11 ? 'bad' : '';
+  $('sM').textContent = fx(T.motorIn, 1) + ' °C'; $('sQ').textContent = fx(h.QL, 1) + ' L/min';
+  $('title').textContent = !R.th.ok ? `At ${fx(load, 2)} kW the radiator cannot reach a steady state`
+    : over > 0 ? `At ${fx(load, 2)} kW the motor coolant settles at ${fx(T.motorIn, 0)} °C, ${fx(over, 0)} °C over its 50 °C limit`
+    : `At ${fx(load, 2)} kW the loop holds the motor inlet at ${fx(T.motorIn, 0)} °C, ${fx(-over, 0)} °C under the limit`;
+  const pct = R.maxLoadKW / load * 100;
+  $('lede').innerHTML = `This radiator rejects about <b>${fx(R.maxLoadKW, 2)} kW</b> with the motor inlet at 50 °C (${fx(pct, 0)}% of the load) at ${fx(S.speed, 0)} km/h, ${fx(S.TaIn, 1)} °C ambient, fan ${S.fan ? 'on' : 'off'}, face velocity ${fx(R.Vf, 2)} m/s. `
+    + `The pump delivers <b>${fx(h.QL, 1)} L/min</b> (target 28); the motor leg gets <b>${fx(qm, 2)} L/min</b>${qm < 6 ? ', below the EMRAX 6 L/min minimum, because its jacket is much stiffer than the inverter leg' : ''}. Click any part in the 3D view for its live numbers.`;
+  $('loopH').textContent = `Motor ${fx(T.motorIn, 1)} → ${fx(T.motorOut, 1)} °C, radiator ${fx(T.radIn, 1)} → ${fx(T.radOut, 1)} °C`;
+  $('hydH').textContent = `Pump runs at ${fx(h.QL, 1)} L/min and ${fx(h.H / 1000, 1)} kPa`;
+  const end = TR.pts[TR.pts.length - 1];
+  $('trH').textContent = `After ${fx(end.t / 60, 0)} min the motor inlet reaches ${fx(end.motorIn, 0)} °C`;
+  $('cLo').textContent = fx(S.TaIn, 0) + ' °C'; $('cHi').textContent = fx(Math.max(T.motorOut, S.TaIn + 10), 0) + ' °C';
+  const L = { lb1: T.potIn, lb2: T.motorIn, lb3: T.invOut, lb4: T.radIn, lb5: T.radOut };
+  for (const k in L) $(k).textContent = fx(L[k], 1) + ' °C';
+  $('lb6').textContent = S.fan ? 'on, lowest point' : 'off, lowest point';
+}
+function method() {
+  $('methodBody').innerHTML = `
+<div>
+ <h3>1 · Hydraulic operating point</h3>
+ <p>Each hose: Darcy–Weisbach with the Churchill (1977) friction factor, which covers laminar, transitional and turbulent flow. Hose lengths are the routed centre-lines in the 3D model (${fx(runs.reduce((a, r) => a + r.L, 0) / 1000, 2)} m in total, against your ~2.5 m).</p>
+ <div class="eq">ΔP = (f·L/D + ΣK)·ρV²/2 &nbsp; f = 8[(8/Re)¹² + (A+B)<sup>−1.5</sup>]<sup>1/12</sup></div>
+ <p>Minor losses <span class="est">estimates</span>: 0.25 per 90° of measured bend, 0.3 per barb, 1.0 per Y leg, 1.0 swirl-pot tangential inlet (jet dumps), 0.5 swirl-pot outlet, 0.3 per radiator nipple, 0.2 per inline temperature sensor, 1.5 for the flow sensor.</p>
+ <p>Components: EMRAX 228 jacket 0.5 bar at 6 L/min ∝ Q² <span class="est">assumed</span>; HV-500LC 0.05 bar at 11.67 L/min ∝ Q² <span class="est">datasheet check</span>; radiator core + tanks from the Radiator Flow Lab engine (flat-tube laminar/Gnielinski with tank contraction and expansion).</p>
+ <p>Parallel legs: bisection on the motor-leg flow until ΔP<sub>motor leg</sub> = ΔP<sub>inverter leg</sub>. Operating point: bisection on total flow until pump head = series ΔP + shared branch ΔP. Elevation cancels around a closed loop; it only enters the node pressures.</p>
+ <div class="eq">EBP40 at 24 V: H = 85 − 75·(Q/35.5)² kPa for Q ≤ 35.5, then linear to 0 at 37 L/min</div>
+ <div class="eq">Other voltages (affinity, n ∝ V): H<sub>V</sub>(Q) = s²·H<sub>24</sub>(Q/s), s = V/24</div>
+ <h3 style="margin-top:16px">2 · Thermal loop</h3>
+ <p>Starting from a guessed swirl-pot temperature, march node by node: ΔT = Q/(ṁc<sub>p</sub>) through the motor and inverter at their own flows, mix at the Y merge by ṁ-weighting, then hand the mixed temperature and total flow to the radiator engine. Bisection on the swirl-pot temperature until the radiator outlet returns to it, so heat out equals heat in. Hydraulics are re-solved at the new mean water temperature until both settle.</p>
+ <p>Radiator engine, unchanged from Radiator Flow Lab: Chang &amp; Wang (1997) louver-fin j, Kim &amp; Bullard (2002) friction with entrance/exit losses, straight-fin efficiency, ε-NTU for crossflow with both fluids unmixed, air density from site altitude. Face velocity solves core ΔP = C<sub>p</sub>·½ρv² + fan pressure, with the SPAL curve points interpolated (the only change: the engine accepts a tabulated fan curve).</p>
+ <div class="eq">ε = 1 − exp[(1/C<sub>r</sub>)·NTU<sup>0.22</sup>(e<sup>−C<sub>r</sub>NTU<sup>0.78</sup></sup> − 1)]</div>
+</div>
+<div>
+ <h3>3 · Checks</h3>
+ <p>Motor coolant inlet ≤ 50 °C; inverter coolant ≤ 60 °C (continuous 50); motor flow 6–11 L/min; inverter inlet ≤ 2 bar and pump head ≤ 0.85 bar; hose velocity ≤ ~3 m/s; total flow vs your 28 L/min target and inverter flow vs 11.67 L/min. Pressures are gauge, with the swirl pot at the cap rating plus static head from the 3D layout heights.</p>
+ <h3 style="margin-top:16px">4 · Transient <span class="est">lumped estimate</span></h3>
+ <div class="eq">(m<sub>w</sub>c<sub>w</sub> + m<sub>Al</sub>c<sub>Al</sub>)·dT/dt = Q<sub>motor</sub> + Q<sub>inv</sub> − k<sub>rad</sub>·(T<sub>rad in</sub> − T<sub>amb</sub>)</div>
+ <p>k<sub>rad</sub> is the engine's heat per degree at the solved flow, for driving and stopped, fan on and off. The fan switches on the radiator inlet temperature with hysteresis. Load swings ±${fx(S.lapAmp * 100, 0)}% on a 75 s lap; the optional driver change stops the car for 3 minutes with no heat input.</p>
+ <h3 style="margin-top:16px">Assumptions</h3>
+ <ul>
+  <li>Plain water properties; hoses do not exchange heat with the air; pump heat into the water neglected (≈60 W electrical).</li>
+  <li>Rotor heat (1.67 kW at the design point) goes to air, not the loop.</li>
+  <li>Clear tubing OD = ID + 1/4"; barb IDs ≈ 5/8" (3/4" barbs).</li>
+  <li>Duct pressure recovery ${fx(S.Cp, 2)} and the shroud length (${GEO.shroudLen} mm) are estimates; shroud losses are not added to the core ΔP.</li>
+  <li>Radiator fin geometry other than 20 FPI (louver angle 27°, louver pitch 1.2 mm, fin height 8 mm, tube 1.8 mm) uses Radiator Flow Lab defaults.</li>
+  <li>EBP40, catch can and Y-fitting envelopes are approximate where no drawing was given.</li>
+  <li>Bleed: air rises to the swirl pot (highest point) and leaves through the cap overflow line to the catch can; that line carries no flow in normal running and is left out of the hydraulics.</li>
+ </ul>
+ <p style="margin-top:10px;font-size:14px;color:var(--mute)">Sources: EMRAX 228 datasheet v1.7 (Ø228 × 86 mm, 12.9–13.5 kg); DTI HV-500 technical description (77 × 213 × 420 mm, 6.7 kg); FSAE Rules 2021 T.5.6; Chang &amp; Wang, IJHMT 40(3) 1997; Kim &amp; Bullard, Int. J. Refrig. 25, 2002; Churchill, Chem. Eng. 1977; component data from your brief.</p>
+</div>`;
+}
+
+// ---------- CSV overlay ----------
+$('csv').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const lines = String(rd.result).split(/\r?\n/).filter((l) => l.trim());
+      let hi = lines.findIndex((l) => /time/i.test(l)); if (hi < 0) hi = 0;
+      const head = lines[hi].split(',').map((x) => x.trim().replace(/"/g, ''));
+      const col = (re) => head.findIndex((h) => re.test(h));
+      const ti = col(/time/i), im = col(/motor/i), ii = col(/inv/i), ir = col(/rad.*in|in.*rad/i), ifn = col(/fan/i);
+      if (ti < 0) throw new Error('no time column');
+      const data = lines.slice(hi + 1).map((l) => l.split(',').map((x) => parseFloat(x.replace(/"/g, '')))).filter((r) => isFinite(r[ti]));
+      let tmax = Math.max(...data.map((r) => r[ti])); const k = tmax > 20000 ? 1 / 60000 : 1 / 60;
+      const series = (i) => i < 0 ? null : data.filter((r) => isFinite(r[i])).map((r) => [r[ti] * k, r[i]]);
+      csv = { motor: series(im), inv: series(ii), radIn: series(ir) };
+      $('csvNote').textContent = `Loaded ${data.length} rows: ${['motor', 'inverter', 'radiator inlet', 'fan'].filter((_, j) => [im, ii, ir, ifn][j] >= 0).join(', ') || 'no matching columns'}.`;
+      charts();
+    } catch (err) { csv = null; $('csvNote').textContent = 'Could not read that file: ' + err.message; }
+  };
+  rd.readAsText(f);
+});
+
+// ---------- pipeline ----------
+let pending = false;
+function changed(id) {
+  for (const el of rows[id] || []) el.sync();
+  if (id === 'preset') syncAll();
+  if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; run(); }); }
+  save();
+}
+function run() {
+  solveAll();
+  R.potV = potVolumeL();
+  const cc = GEO.catchCan; R.canL = Math.PI * (cc.D / 2 - cc.wall) ** 2 * (cc.H - 2 * cc.wall) / 1e6;
+  headline(); tables(); flags(); schematic(); charts(); update3D(); method();
+  if (!$('info').hidden && $('info').dataset.part) R3.onPick($('info').dataset.part);
+}
+renderTabs(); renderCtl(); run();
+const vis = { v: true };
+new IntersectionObserver((es) => { for (const e of es) vis.v = e.isIntersecting; }).observe($('view'));
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { R3.autoSpin = false; segBtn('vSpin', null, false); }
+let last = performance.now();
+function tick(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; if (vis.v && R3.ok) R3.frame(reduce ? 0 : dt); requestAnimationFrame(tick); }
+requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>
