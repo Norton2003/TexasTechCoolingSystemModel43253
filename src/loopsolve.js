@@ -46,12 +46,12 @@ function faceVelocity(s, overrides) { return operatingPoint(radInputs(s, 60, 10,
 function buildNet(s, runs) {
   const D = (inch) => inch * 0.0254;
   const lineID = { pump: D(s.idMain), main: D(s.idMain), return: D(s.idReturn), motor: D(s.idMotor), inv: D(s.idInv) };
-  const hoses = runs.map((r) => ({ id: r.id, name: r.name, line: r.line, L: r.L / 1000, D: lineID[r.line], Kb: K.bend90 * r.turn / 90, sensor: r.sensor }));
+  const hoses = runs.map((r) => ({ id: r.id, name: r.name, line: r.line, L: r.L / 1000, D: lineID[r.line], Kb: K.bend90 * r.turn / 90, Ks: (r.sensors || []).reduce((a, x) => a + (x.type === 'flow' ? K.flowSensor : K.sensorT), 0) }));
   return { hoses, orifice: s.orificeMM / 1000, Dinv: lineID.inv };
 }
 function hoseDP(h, Q, w, extraK) {
   const A = Math.PI * h.D * h.D / 4, V = Q / A, Re = w.rho * V * h.D / w.mu, f = fDarcy(Re, 1.5e-6 / h.D);
-  const K_ = h.Kb + 2 * K.barb + (extraK || 0) + (h.sensor === 'flow' ? K.flowSensor : h.sensor ? K.sensorT : 0);
+  const K_ = h.Kb + 2 * K.barb + (extraK || 0) + (h.Ks || 0);
   const fr = f * h.L / h.D * w.rho * V * V / 2, mi = K_ * w.rho * V * V / 2;
   return { dp: fr + mi, fr, mi, V, Re, f, K: K_ };
 }

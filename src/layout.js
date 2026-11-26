@@ -1,54 +1,102 @@
-// Shared layout of the cooling loop: component positions (mm) and hose centre-lines.
-// x right, y up (gravity -y), z forward (air enters the radiator from +z).
+// Cooling-loop layout in car coordinates (mm): x lateral (+ right), y up, z forward (+ toward the accumulator, − toward the rear).
+// Arranged after the team's rear-bay screenshots: radiator + shroud + fan low at the very rear, EMRAX across the bay with
+// its axis lateral, swirl pot at the top feeding straight down into the EBP40.
 const IN = 25.4;
+// Fitting orientations and hose control points, found offline by a route optimiser (minimum bend radius ≥ 2.5 × hose OD,
+// clearance to every component, frame tube and other hose); see README.
+const ROUTE = /*ROUTE*/{"potYaw": 1.5708, "pumpYaw": 3.1416, "ySplit": {"c": [-130.878766, 174.58054, -266.858585], "a": [-0.010703, 1.349884, 0.343832], "r": 1.189983}, "yMerge": {"c": [-153.185642, 433.703118, -718.497552], "a": [0.307544, -0.862982, -1.82065], "r": 1.414104}, "vias": {"h2": {"v": [[-111.332232, 279.178568, -223.802285], [-124.011683, 264.650858, -242.02268]], "la": 25.473415, "lb": 28.542159}, "h3m": {"v": [[-215.150051, 74.957086, -381.471561], [-146.816739, 248.510779, -473.931228]], "la": 48.160374, "lb": 28.463018}, "h4m": {"v": [[-128.727053, 336.611695, -492.678666], [-143.324777, 377.84167, -569.960239]], "la": 25.025602, "lb": 45.438588}, "h3i": {"v": [[104.839378, 89.196215, -544.838902]], "la": 110, "lb": 110}, "h4i": {"v": [[-180.143004, 356.338589, -498.270839], [-188.996662, 559.70182, -571.905319]], "la": 55.37384, "lb": 70.659459}, "h5": {"v": [], "la": 34.323775, "lb": 80.657766}, "h6": {"v": [[290.568375, 176.677295, -820.69311], [90.891515, 351.707776, -685.409025], [-211.470202, 646.329831, -368.531172]], "la": 30.379213, "lb": 29.270481}}}/*END*/;
+function yBasis(o) { // trunk axis t (unit), legs at ±35° about −t in the plane of side vector s (roll r about t)
+  const n0 = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); }, cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const t = n0(o.a), ref = Math.abs(t[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]; let s = n0(cr(ref, t)); const u = cr(t, s);
+  s = s.map((v, i) => v * Math.cos(o.r) + u[i] * Math.sin(o.r)); const n = cr(s, t);
+  return { c: o.c, t, s, n };
+}
 const GEO = (() => {
   const g = {};
-  // radiator: overall 11.75 x 4.875 x 3.8 in, core 9.25 x 4.5 x 2.0 in, side tanks, no reservoir
-  g.rad = { c: [0, 90, 0], W: 11.75 * IN, H: 4.875 * IN, D: 3.8 * IN, coreW: 9.25 * IN, coreH: 4.5 * IN, coreD: 2.0 * IN };
+  // rear bay (approximate): firewall at z = 0, rear end of the frame at z = −780; x + is the car's right
+  g.frame = { xb: 230, xt: 250, yb: 40, yt: 600, zr: -780, zrt: -720, zf: 0, r: 12.7 };
+  g.firewall = { z: 0 };
+  // radiator outside the chassis at the rear, centred; air flows rearward (−z) out through two 4 in fans
+  g.rad = { c: [0, 170, -836], W: 11.75 * IN, H: 4.875 * IN, D: 3.8 * IN, coreW: 9.25 * IN, coreH: 4.5 * IN, coreD: 2.0 * IN };
   g.rad.tankW = (g.rad.W - g.rad.coreW) / 2;
   const rc = g.rad.c, rW = g.rad.W, rH = g.rad.H;
-  g.radIn = [rc[0] - rW / 2 + g.rad.tankW / 2, rc[1] + rH / 2, 0]; // top of left tank, nipple up
-  g.radInEnd = [g.radIn[0], g.radIn[1] + 38, 0];
-  g.radOut = [rc[0] + rW / 2, rc[1] - rH / 2 + 22, 0]; // low on right tank, nipple outboard
-  g.radOutEnd = [g.radOut[0] + 38, g.radOut[1], 0];
-  // shroud + fan behind the core, lowest part of the system
-  g.shroudLen = 70;
-  g.fan = { D: 184, depth: 52.1, holes: 135, c: [rc[0], rc[1], -g.rad.coreD / 2 - g.shroudLen - 52.1 / 2] };
-  // Y merge above radiator inlet, components in parallel, Y split, pump, swirl pot on top
-  g.yMerge = { c: [g.radIn[0], 300, 0], flip: true };
-  g.motor = { c: [-330, 470, 0], D: 228, L: 86 };
-  g.inv = { c: [300, 470, 0], L: 420, Wd: 213, Hh: 77 };
-  g.ySplit = { c: [0, 640, 0], flip: false };
-  g.pump = { c: [0, 770, 0] };
-  // swirl pot V3 (inches)
+  g.radIn = [rc[0] - rW / 2 + g.rad.tankW / 2, rc[1] + rH / 2, rc[2]];
+  g.radInEnd = [g.radIn[0], g.radIn[1] + 38, rc[2]];
+  g.radOut = [rc[0] + rW / 2, rc[1] - rH / 2 + 22, rc[2]];
+  g.radOutEnd = [g.radOut[0] + 38, g.radOut[1], rc[2]];
+  g.shroudLen = 40;
+  g.fans = { n: 2, D: 4 * IN, depth: 32, pitch: 4.4 * IN };
+  g.fan = { D: g.fans.D, depth: g.fans.depth, holes: 82.5, c: [rc[0], rc[1], rc[2] - g.rad.coreD / 2 - g.shroudLen - g.fans.depth / 2] };
+  // EMRAX 228 near the rear, axis across the car, stator side + coolant ports toward the left (−x)
+  g.motor = { c: [10, 300, -540], D: 228, L: 86 };
+  // DTI HV-500LC forward of the motor, standing across the car (420 wide, 213 tall, 77 thick); ports on its rear face, left end
+  g.inv = { c: [0, 285, -330], L: 420, Wd: 213, Hh: 77 };
+  // swirl pot V3 at the highest point, front left, on the cross tube just behind the firewall; pump directly under it
   const sp = g.pot = { ri: 1.25 * IN, ro: 2.625 / 2 * IN, body: 4.0 * IN, cone: 2.0 * IN, outRi: 0.625 / 2 * IN, nipRo: 0.75 / 2 * IN, nipL: 4.1 * IN, inletY: 3.4 * IN, capD: 2.75 * IN, capT: 0.125 * IN, open: 1.0 * IN, tubeRo: 0.75 / 2 * IN, wall: IN / 16 };
-  sp.base = 900 + sp.nipL + sp.cone; // y of body bottom (cone top)
-  sp.c = [0, sp.base, 0];
-  sp.nipBot = [0, sp.base - sp.cone - sp.nipL, 0];
+  sp.c = [-125, 0, -105];
+  sp.base = 535;
+  sp.nipBot = [sp.c[0], sp.base - sp.cone - sp.nipL, sp.c[2]];
   sp.inletZ = -(sp.ri - (sp.tubeRo - sp.wall));
-  sp.inletEnd = [sp.ri + 62, sp.base + sp.inletY, sp.inletZ];
+  sp.yaw = ROUTE.potYaw || 0;
+  { const c = Math.cos(sp.yaw), s = Math.sin(sp.yaw), lx = sp.ri + 62, lz = sp.inletZ; sp.inletEnd = [sp.c[0] + lx * c + lz * s, sp.base + sp.inletY, sp.c[2] - lx * s + lz * c]; sp.inletDir = [c, 0, -s]; }
   sp.top = sp.base + sp.body;
-  g.catchCan = { c: [-150, 1010, -70], D: 3.5 * IN, H: 7.0 * IN, wall: 0.065 * IN };
-  g.frame = { x: 640, zf: 190, zb: -200, y0: -40, y1: 1290 };
+  g.pump = { c: [sp.c[0], sp.nipBot[1] - 32 - 78, sp.c[2]], yaw: ROUTE.pumpYaw };
+  g.ySplit = yBasis(ROUTE.ySplit);
+  g.yMerge = yBasis(ROUTE.yMerge);
+  // catch bottle: rear right corner, low, inside the frame
+  g.catchCan = { c: [165, 150, -690], D: 3.5 * IN, H: 7.0 * IN, wall: 0.065 * IN };
+  // frame tubes
+  const F = g.frame, T = [];
+  for (const s of [-1, 1]) {
+    T.push([[s * F.xb, F.yb, F.zr], [s * F.xb, F.yb, F.zf]], [[s * F.xt, F.yt, F.zrt], [s * F.xt, F.yt, F.zf]], [[s * F.xb, F.yb, F.zr], [s * F.xt, F.yt, F.zrt]],
+      [[s * F.xb, F.yb, F.zf], [s * F.xt, F.yt, F.zf]], [[s * F.xb, F.yb, -390], [s * F.xt, F.yt, F.zf]], [[s * F.xb, F.yb, -390], [s * F.xt, F.yt, F.zrt]],
+      [[s * F.xb, 300, F.zf], [s * F.xb, 300, -260]]);
+  }
+  T.push([[-F.xb, F.yb, F.zr], [F.xb, F.yb, F.zr]], [[-F.xt, F.yt, F.zrt], [F.xt, F.yt, F.zrt]], [[-F.xb, F.yb, -390], [F.xb, F.yb, -390]],
+    [[-F.xb, F.yb, F.zf], [F.xb, F.yb, F.zf]], [[-F.xt, F.yt, F.zf], [F.xt, F.yt, F.zf]], [[-F.xt, F.yt, -22], [F.xt, F.yt, -22]],
+    [[-236, 300, -753], [236, 300, -753]]);
+  g.frameTubes = T;
   return g;
 })();
-function catmull(pts, step = 6) {
-  const out = [];
-  const P = [pts[0], ...pts, pts[pts.length - 1]];
-  for (let i = 1; i < P.length - 2; i++) {
-    const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
-    const seg = Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]);
-    const n = Math.max(2, Math.ceil(seg / step));
-    for (let k = 0; k < n; k++) {
-      const t = k / n, t2 = t * t, t3 = t2 * t;
-      out.push([0, 1, 2].map((j) => 0.5 * ((2 * p1[j]) + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3)));
+// Clamped uniform cubic B-spline through a control polygon (C2-continuous: no kinks), resampled by arc length.
+// End tangents follow the barb direction because the first/last control points sit on the barb axis.
+function smoothRoute(ctrl, step = 4) {
+  const C = [ctrl[0], ctrl[0], ...ctrl, ctrl[ctrl.length - 1], ctrl[ctrl.length - 1]], dense = [];
+  for (let i = 0; i < C.length - 3; i++) {
+    const [p0, p1, p2, p3] = [C[i], C[i + 1], C[i + 2], C[i + 3]];
+    const seg = Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]), m = Math.max(6, Math.ceil(seg / 1.2));
+    for (let k = 0; k < m; k++) {
+      const t = k / m, t2 = t * t, t3 = t2 * t;
+      const b0 = (1 - t) ** 3 / 6, b1 = (3 * t3 - 6 * t2 + 4) / 6, b2 = (-3 * t3 + 3 * t2 + 3 * t + 1) / 6, b3 = t3 / 6;
+      dense.push([0, 1, 2].map((j) => b0 * p0[j] + b1 * p1[j] + b2 * p2[j] + b3 * p3[j]));
     }
   }
-  out.push(pts[pts.length - 1]);
+  dense.push(ctrl[ctrl.length - 1]);
+  const cum = [0]; for (let i = 1; i < dense.length; i++) cum.push(cum[i - 1] + Math.hypot(dense[i][0] - dense[i - 1][0], dense[i][1] - dense[i - 1][1], dense[i][2] - dense[i - 1][2]));
+  const Ltot = cum[cum.length - 1], N = Math.max(8, Math.ceil(Ltot / step)), out = [];
+  let j = 0;
+  for (let k = 0; k <= N; k++) { const s = Ltot * k / N; while (j < cum.length - 2 && cum[j + 1] < s) j++; const f = (s - cum[j]) / Math.max(1e-9, cum[j + 1] - cum[j]); out.push(dense[j].map((v, q) => v + (dense[j + 1][q] - v) * f)); }
   return out;
 }
+// Relax any stretch tighter than rMin (keeps the first/last `pin` mm straight on the barbs)
+function relaxBends(p, rMin = 45, pin = 14) {
+  const d = (x, y) => Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  const cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + d(p[i], p[i - 1]));
+  const L = cum[cum.length - 1], lo = cum.findIndex((c) => c >= pin), hiIdx = cum.findIndex((c) => c >= L - pin);
+  for (let it = 0; it < 4000; it++) {
+    let worst = 1e9, moved = false;
+    for (let i = 2; i < p.length - 2; i++) {
+      const a = p[i - 2], b = p[i], c = p[i + 2], ab = d(a, b), bc = d(b, c), ac = d(a, c), s = (ab + bc + ac) / 2;
+      const ar = Math.sqrt(Math.max(0, s * (s - ab) * (s - bc) * (s - ac))), r = ar > 1e-9 ? ab * bc * ac / (4 * ar) : 1e9;
+      worst = Math.min(worst, r);
+      if (r < rMin) { for (let k = -2; k <= 2; k++) { const j = i + k; if (j <= lo || j >= hiIdx) continue; for (let q = 0; q < 3; q++) p[j][q] += ((p[j - 1][q] + p[j + 1][q]) / 2 - p[j][q]) * 0.5; } moved = true; }
+    }
+    if (!moved) break;
+  }
+  return p;
+}
 function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1], p[i][2] - p[i - 1][2]); return L; }
-function pathTurn(p) { // total turning angle (deg), used for bend losses
+function pathTurn(p) {
   let a = 0;
   for (let i = 1; i < p.length - 1; i++) {
     const u = [p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1], p[i][2] - p[i - 1][2]], v = [p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1], p[i + 1][2] - p[i][2]];
@@ -57,45 +105,60 @@ function pathTurn(p) { // total turning angle (deg), used for bend losses
   }
   return a * 180 / Math.PI;
 }
-// Port positions of fittings/components (hose attachment points, at the end of each barb)
+function minBendRadius(p) {
+  let r = 1e9;
+  for (let i = 2; i < p.length - 2; i++) {
+    const a = p[i - 2], b = p[i], c = p[i + 2], ab = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), bc = Math.hypot(c[0] - b[0], c[1] - b[1], c[2] - b[2]), ac = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    const s = (ab + bc + ac) / 2, area = Math.sqrt(Math.max(0, s * (s - ab) * (s - bc) * (s - ac)));
+    if (area > 1e-6) r = Math.min(r, ab * bc * ac / (4 * area));
+  }
+  return r;
+}
+const catmull = (pts, step) => smoothRoute(pts, step || 4);
+// Barb tips (hose ends) with outward barb directions
 function ports() {
-  const g = GEO, P = {};
-  P.potOut = g.pot.nipBot;
-  P.pumpIn = [g.pump.c[0], g.pump.c[1] + 82, 0];
-  P.pumpOut = [g.pump.c[0] + 80, g.pump.c[1] + 27, 0];
-  const ys = g.ySplit.c, ym = g.yMerge.c;
-  // Y-fitting envelope 2.98 x 3.54 x 1.5 in: trunk barb tip 46 mm above centre, legs 44 mm below at +/-31 mm
-  P.ySplitIn = [ys[0], ys[1] + 46, 0];
-  P.ySplitM = [ys[0] - 31, ys[1] - 44, 0];
-  P.ySplitI = [ys[0] + 31, ys[1] - 44, 0];
-  P.yMergeOut = [ym[0], ym[1] - 46, 0];
-  P.yMergeM = [ym[0] - 31, ym[1] + 44, 0];
-  P.yMergeI = [ym[0] + 31, ym[1] + 44, 0];
+  const g = GEO, P = {}, D = {};
+  const set = (k, p, d) => { P[k] = p; D[k] = d; };
+  set('potOut', g.pot.nipBot, [0, -1, 0]);
+  const pc = g.pump.c;
+  set('pumpIn', [pc[0], pc[1] + 78, pc[2]], [0, 1, 0]);
+  const cy = Math.cos(g.pump.yaw), sy = Math.sin(g.pump.yaw), rotY = (v) => [v[0] * cy + v[2] * sy, v[1], -v[0] * sy + v[2] * cy];
+  const po = rotY([-20, 12, 75]); set('pumpOut', [pc[0] + po[0], pc[1] + po[1], pc[2] + po[2]], rotY([0, 0, 1]));
+  const yPorts = (Y, trunk, legA, legB) => {
+    const at = (dir, L) => [Y.c[0] + dir[0] * L, Y.c[1] + dir[1] * L, Y.c[2] + dir[2] * L];
+    const la = Y.t.map((v, i) => -0.817 * v - 0.576 * Y.s[i]), lb = Y.t.map((v, i) => -0.817 * v + 0.576 * Y.s[i]);
+    set(trunk, at(Y.t, 46), Y.t); set(legA, at(la, 53.8), la); set(legB, at(lb, 53.8), lb);
+  };
+  yPorts(g.ySplit, 'ySplitIn', 'ySplitM', 'ySplitI');
+  yPorts(g.yMerge, 'yMergeOut', 'yMergeM', 'yMergeI');
   const m = g.motor;
-  // EMRAX liquid ports sit on the stator (mounting) side near the centre
-  P.motorIn = [m.c[0] + 48, m.c[1] + 26, -m.L / 2 - 34];
-  P.motorOut = [m.c[0] + 48, m.c[1] - 26, -m.L / 2 - 34];
+  set('motorIn', [m.c[0] - m.L / 2 - 34, m.c[1] - 26, m.c[2] + 60], [-1, 0, 0]);
+  set('motorOut', [m.c[0] - m.L / 2 - 34, m.c[1] + 26, m.c[2] + 60], [-1, 0, 0]);
   const v = g.inv;
-  P.invIn = [v.c[0] - v.L / 2 - 34, v.c[1] + 18, 50];
-  P.invOut = [v.c[0] - v.L / 2 - 34, v.c[1] - 18, -50];
-  P.radIn = g.radInEnd; P.radOut = g.radOutEnd;
-  P.potIn = g.pot.inletEnd;
+  // HV-500LC coolant ports on the top edge near the rear end, pointing up
+  // HV-500LC coolant ports on the rear face near its left end, pointing rearward
+  set('invIn', [v.c[0] - v.L / 2 + 40, v.c[1] - 40, v.c[2] - v.Hh / 2 - 34], [0, 0, -1]);
+  set('invOut', [v.c[0] - v.L / 2 + 40, v.c[1] + 40, v.c[2] - v.Hh / 2 - 34], [0, 0, -1]);
+  set('radIn', g.radInEnd, [0, 1, 0]); set('radOut', g.radOutEnd, [1, 0, 0]);
+  { const sp = g.pot; sp.yaw = ROUTE.potYaw || 0; const c = Math.cos(sp.yaw), s = Math.sin(sp.yaw), lx = sp.ri + 62, lz = sp.inletZ; sp.inletEnd = [sp.c[0] + lx * c + lz * s, sp.base + sp.inletY, sp.c[2] - lx * s + lz * c]; sp.inletDir = [c, 0, -s]; set('potIn', sp.inletEnd, sp.inletDir); }
+  P._dir = D;
   return P;
 }
-// Hose runs: id, from, to, waypoints, line (pump/motor/inv/main/return)
-function hoseRuns() {
-  const P = ports(), g = GEO;
+function hoseRuns(route) {
+  const RT = route || ROUTE, P = ports(), D = P._dir;
+  const lead = (k, L) => [P[k][0] + D[k][0] * L, P[k][1] + D[k][1] * L, P[k][2] + D[k][2] * L];
+  const mk = (id, a, b) => { const v = (RT.vias && RT.vias[id]) || { v: [], la: 40, lb: 40 }; return smoothRoute([P[a], lead(a, v.la * 0.5), lead(a, v.la), ...v.v, lead(b, v.lb), lead(b, v.lb * 0.5), P[b]], 4); };
   const runs = [
-    { id: 'h1', name: 'Swirl pot → pump', line: 'pump', pts: [P.potOut, [0, P.potOut[1] - 20, 0], [0, P.pumpIn[1] + 18, 0], P.pumpIn] },
-    { id: 'h2', name: 'Pump → Y split', line: 'pump', pts: [P.pumpOut, [P.pumpOut[0] + 30, P.pumpOut[1] - 10, 0], [60, 712, 0], [P.ySplitIn[0] + 10, P.ySplitIn[1] + 26, 0], P.ySplitIn], sensor: 'flow' },
-    { id: 'h3m', name: 'Y split → motor', line: 'motor', pts: [P.ySplitM, [P.ySplitM[0] - 30, P.ySplitM[1] - 40, 10], [-140, 560, -40], [P.motorIn[0] + 30, P.motorIn[1] + 16, P.motorIn[2] - 26], P.motorIn], sensor: 'Tmotor' },
-    { id: 'h4m', name: 'Motor → Y merge', line: 'motor', pts: [P.motorOut, [P.motorOut[0] + 30, P.motorOut[1] - 16, P.motorOut[2] - 26], [-150, 380, -50], [P.yMergeM[0] - 30, P.yMergeM[1] + 40, 10], P.yMergeM] },
-    { id: 'h3i', name: 'Y split → inverter', line: 'inv', pts: [P.ySplitI, [P.ySplitI[0] + 30, P.ySplitI[1] - 40, 10], [80, 520, 50], [P.invIn[0] - 20, P.invIn[1] + 4, P.invIn[2]], P.invIn] },
-    { id: 'h4i', name: 'Inverter → Y merge', line: 'inv', pts: [P.invOut, [P.invOut[0] - 24, P.invOut[1] - 6, P.invOut[2]], [-30, 400, -30], [P.yMergeI[0] + 26, P.yMergeI[1] + 40, -10], P.yMergeI], sensor: 'Tinv' },
-    { id: 'h5', name: 'Y merge → radiator in', line: 'main', pts: [P.yMergeOut, [P.yMergeOut[0], P.yMergeOut[1] - 25, 0], [P.radIn[0], P.radIn[1] + 22, 0], P.radIn], sensor: 'TradIn' },
-    { id: 'h6', name: 'Return: radiator out → swirl pot', line: 'return', pts: [P.radOut, [P.radOut[0] + 40, P.radOut[1] + 4, -20], [250, 120, -150], [250, 700, -160], [210, 1000, -120], [P.potIn[0] + 60, P.potIn[1] - 8, P.potIn[2] - 10], P.potIn], sensor: 'TradOut' }
+    { id: 'h1', name: 'Swirl pot → pump', line: 'pump', path: smoothRoute([P.potOut, P.pumpIn], 2) },
+    { id: 'h2', name: 'Pump → Y split', line: 'pump', path: mk('h2', 'pumpOut', 'ySplitIn') },
+    { id: 'h3m', name: 'Y split → motor', line: 'motor', path: mk('h3m', 'ySplitM', 'motorIn') },
+    { id: 'h4m', name: 'Motor → Y merge', line: 'motor', path: mk('h4m', 'motorOut', 'yMergeM') },
+    { id: 'h3i', name: 'Y split → inverter', line: 'inv', path: mk('h3i', 'ySplitI', 'invIn') },
+    { id: 'h4i', name: 'Inverter → Y merge', line: 'inv', path: mk('h4i', 'invOut', 'yMergeI') },
+    { id: 'h5', name: 'Y merge → radiator in', line: 'main', path: mk('h5', 'yMergeOut', 'radIn'), sensors: [{ type: 'temp', name: 'Radiator inlet temperature', at: 0.5 }] },
+    { id: 'h6', name: 'Return: radiator out → swirl pot', line: 'return', path: mk('h6', 'radOut', 'potIn'), sensors: [{ type: 'temp', name: 'Radiator outlet temperature', at: 0.1 }, { type: 'flow', name: 'Flow sensor (before swirl pot inlet)', at: 0.86 }] }
   ];
-  for (const r of runs) { r.path = catmull(r.pts, 5); r.L = pathLen(r.path); r.turn = pathTurn(r.path); }
+  for (const r of runs) { r.sensors = r.sensors || []; r.L = pathLen(r.path); r.turn = pathTurn(r.path); r.minR = minBendRadius(r.path); }
   return runs;
 }
-if (typeof module !== 'undefined') module.exports = { GEO, hoseRuns, ports, catmull, pathLen, pathTurn, IN };
+if (typeof module !== 'undefined') module.exports = { ROUTE, yBasis, relaxBends, GEO, hoseRuns, ports, catmull, smoothRoute, pathLen, pathTurn, minBendRadius, IN };

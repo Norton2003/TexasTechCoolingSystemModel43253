@@ -14,6 +14,17 @@ An interactive 3D simulator of the Red Raider Racing FSAE EV (2026–27) cooling
 
 ![Swirl pot cutaway](docs/swirl-pot-cutaway.png)
 
+## Layout and CAD inputs
+
+- **Layout, front to back:** swirl pot at the highest point, on the cross tube right behind the firewall, with the pump on the chassis directly under it; then the DTI HV-500 (forward) and the EMRAX 228 (closer to the rear), both inside the chassis; then the radiator, shroud and two 4 in fans, mounted outside the rear of the chassis. The catch bottle sits low inside the frame at the rear right corner. Seen from behind, facing the fans, the swirl pot is on the left. Bay dimensions and the inverter port positions are estimates.
+- **Firewall:** no cooling part sits ahead of the firewall plane.
+- **Y fittings:** hang on the 3/4 in hose, with no bracket.
+- **Sensors:** two temperature sensors, at the radiator inlet and the radiator outlet, and one flow sensor on the return line before the swirl pot inlet.
+- **Numbers:** the thermal and hydraulic results are unvalidated model estimates, there to help explain the loop. The airflow still uses the old single SPAL fan curve.
+- **EBP40 pump:** proportions come from `Pump_V1.SLDPRT`. It is 145 mm tall, and the outlet barb is 75 mm off-axis.
+- **Tabs:** `Tab_1in` is 1.0 × 0.5 in with a Ø0.25 in hole. `Tab_2in` is 2.0 × 1.0 in, 0.075 in thick, with a Ø0.5 in hole. Both are welded to the frame tubes where parts mount.
+- **Hose routes:** `tools-route-optimizer.js` finds the routes. It runs offline with Node and searches the Y-fitting orientations, the pump and swirl-pot rotation, and the hose waypoints. It keeps every bend at least about 2 × the hose OD and keeps the hoses clear of the components, the frame and each other. The result is stored as `ROUTE` in `src/layout.js`.
+
 ## Run it
 
 `index.html` is one self-contained file. Open it in a browser, or host it with GitHub Pages:
@@ -28,7 +39,7 @@ An interactive 3D simulator of the Red Raider Racing FSAE EV (2026–27) cooling
 |---|---|
 | `src/index.src.html` | Page layout and CSS |
 | `src/physics.js` | Radiator engine (from Radiator Flow Lab) |
-| `src/layout.js` | Component positions and hose routing (mm) |
+| `src/layout.js` | Car-bay layout, ports and B-spline hose routes (mm) |
 | `src/loopsolve.js` | Pump/system solve, branch split, thermal loop, checks, transient |
 | `src/geom.js` | Mesh helpers |
 | `src/render_loop.js` | WebGL2 renderer: parts, shadows, SSAO, bloom, picking |

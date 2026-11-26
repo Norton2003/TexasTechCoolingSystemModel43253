@@ -78,13 +78,13 @@ void main(){ vec4 w=uModel*vec4(aPos+iOff,1.); vN=mat3(uModel)*aNrm; vW=w.xyz; v
 const LFS_DEPTH = `#version 300 es
 precision mediump float; out vec4 o; void main(){ o=vec4(1.); }`;
 const LFS_PICK = `#version 300 es
-precision mediump float; uniform vec3 uPickC; uniform float uCutZ; uniform int uCutOn; in vec3 vW; out vec4 o; void main(){ if(uCutOn==1&&vW.z>uCutZ) discard; o=vec4(uPickC,1.); }`;
+precision highp float; uniform vec3 uPickC; uniform float uCutZ; uniform vec3 uCutN; uniform int uCutOn; in vec3 vW; out vec4 o; void main(){ if(uCutOn==1&&dot(vW,uCutN)>uCutZ) discard; o=vec4(uPickC,1.); }`;
 const LFS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW; in vec3 vN; in vec2 vUV; in vec4 vA; in vec3 vL; out vec4 o;
 uniform vec3 uCam; uniform int uKind; uniform float uThermal; uniform float uTlo; uniform float uThi; uniform float uTa; uniform float uTb; uniform float uLen;
 uniform float uRW; uniform float uRD; uniform float uLp; uniform float uTheta; uniform vec3 uRC;
-uniform int uCutOn; uniform float uCutZ; uniform float uAlpha; uniform int uSel; uniform float uTime; uniform int uHDR; uniform int uUseAO; uniform vec2 uScreen; uniform float uFade;
+uniform int uCutOn; uniform float uCutZ; uniform vec3 uCutN; uniform float uAlpha; uniform int uSel; uniform float uTime; uniform int uHDR; uniform int uUseAO; uniform vec2 uScreen; uniform float uFade;
 uniform sampler2DShadow uShadow; uniform mat4 uLightVP; uniform vec3 uLdir; uniform sampler2D uTemp; uniform vec2 uTempSize; uniform sampler2D uAO;
 ${LRAMP}
 const float PI=3.14159265;
@@ -121,7 +121,7 @@ vec3 light(vec3 base,float metal,float rough,vec3 n,vec3 v,float sh,float ao){
 float tnorm(float T){ return (T-uTlo)/max(.1,uThi-uTlo); }
 vec3 outc(vec3 c){ if(uHDR==1) return c; c=(c*(2.51*c+.03))/(c*(2.43*c+.59)+.14); return pow(clamp(c,0.,1.),vec3(1./2.2)); }
 void main(){
- if(uCutOn==1&&vW.z>uCutZ) discard;
+ if(uCutOn==1&&dot(vW,uCutN)>uCutZ) discard;
  vec3 n=normalize(vN); vec3 v=normalize(uCam-vW); if(dot(n,v)<0.) n=-n;
  float alpha=uAlpha; float sao=uUseAO==1?texture(uAO,gl_FragCoord.xy/uScreen).r:1.;
  if(uKind==3){ float r=length(vW.xz-vec2(40.,0.))/1700.; vec3 c=mix(vec3(.011,.013,.017),vec3(.0045,.0055,.0075),smoothstep(0.,.75,r));
@@ -193,8 +193,8 @@ void main(){ float e=1.-abs(vE); float a=vC.a*smoothstep(0.,.7,e); vec3 c=mix(vC
 const PVS = `#version 300 es
 out vec2 vUV; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUV=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const PFS_G = `#version 300 es
-precision highp float; in vec3 vW; in vec3 vN; uniform mat4 uV; uniform int uCutOn; uniform float uCutZ; out vec4 o;
-void main(){ if(uCutOn==1&&vW.z>uCutZ) discard; vec3 n=normalize(mat3(uV)*normalize(vN)); if(n.z<0.) n=-n; o=vec4(n*.5+.5,1.); }`;
+precision highp float; in vec3 vW; in vec3 vN; uniform mat4 uV; uniform int uCutOn; uniform float uCutZ; uniform vec3 uCutN; out vec4 o;
+void main(){ if(uCutOn==1&&dot(vW,uCutN)>uCutZ) discard; vec3 n=normalize(mat3(uV)*normalize(vN)); if(n.z<0.) n=-n; o=vec4(n*.5+.5,1.); }`;
 const PFS_SSAO = `#version 300 es
 precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uD; uniform sampler2D uN; uniform mat4 uP; uniform mat4 uIP; uniform vec3 uK[16]; uniform float uRad;
 vec3 vpos(vec2 uv){ float d=texture(uD,uv).r; vec4 p=uIP*vec4(uv*2.-1.,d*2.-1.,1.); return p.xyz/p.w; }
@@ -246,7 +246,7 @@ class LoopRenderer {
     this.kernel = new Float32Array(48); for (let i = 0; i < 16; i++) { const a = i * 2.399963, z = 0.15 + 0.85 * ((i + 0.5) / 16), r = Math.sqrt(1 - z * z), sc = 0.2 + 0.8 * ((i + 1) / 16) ** 2; this.kernel.set([Math.cos(a) * r * sc, Math.sin(a) * r * sc, z * sc], i * 3); }
     this.samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
     this.tg = null;
-    this.yaw = -0.6; this.pitch = 0.22; this.zoom = 1; this.autoSpin = true; this.pan = [0, 0];
+    this.yaw = -2.35; this.pitch = 0.42; this.zoom = 1; this.autoSpin = true; this.pan = [0, 0];
     this.thermal = 1; this.cut = false; this.flow = true; this.explode = 0; this.sel = null; this.t = 0; this.fanAng = 0;
     this.Ldir = nrm([0.42, 0.88, 0.5]);
     this.bindInput();
@@ -273,7 +273,7 @@ class LoopRenderer {
     const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; if (moved < 6 && down && e.type === 'pointerup') this.pickAt(e.clientX, e.clientY); down = null; };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     cv.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.25, Math.min(2, this.zoom * Math.exp(e.deltaY * 0.001))); }, { passive: false });
-    cv.addEventListener('dblclick', () => { this.yaw = -0.6; this.pitch = 0.22; this.zoom = 1; this.pan = [0, 0]; this.focus('loop'); this.onFocus && this.onFocus('loop'); });
+    cv.addEventListener('dblclick', () => { this.yaw = -2.35; this.pitch = 0.42; this.zoom = 1; this.pan = [0, 0]; this.focus('loop'); this.onFocus && this.onFocus('loop'); });
   }
   // ---------- build the assembly ----------
   build(runs, hoseDims, radR) {
@@ -282,207 +282,245 @@ class LoopRenderer {
     const items = this.items = []; let pid = 0; this.parts = {};
     const add = (part, mesh, kind, o = {}) => {
       if (!this.parts[part]) this.parts[part] = { pid: ++pid, ex: o.ex || [0, 0, 0] };
-      const it = { part, mesh: this.up(mesh), own: true, kind, ex: this.parts[part].ex, cut: !!o.cut, glass: !!o.glass || !!o.fade, alpha: o.alpha ?? 1, len: o.len || 1, inst: o.inst, hose: o.hose, spin: o.spin, center: o.center, ghost: !!o.ghost, coolant: !!o.coolant, fade: !!o.fade };
+      const it = { part, mesh: this.up(mesh), own: true, kind, ex: this.parts[part].ex, cut: o.cutC != null, cutC: o.cutC, glass: !!o.glass, alpha: o.alpha ?? 1, len: o.len || 1, inst: o.inst, hose: o.hose, spin: o.spin, spinAxis: o.spinAxis, center: o.center, coolant: !!o.coolant };
       items.push(it); return it;
     };
-    const F = g.frame, P = ports();
+    const F = g.frame, P = ports(), PD = P._dir;
     const hexNut = (r, h) => cylinder(r, h, 6);
-    const wire = (part, pts, r, kind) => add(part, sweep(catmull(pts, 4), r, 10), kind);
     const ring = (c, R, rt, plane) => ringMesh(c, R, rt, plane);
-    // ================= swirl pot V3 =================
-    const sp = g.pot, B = sp.base, exPot = [0, 140, 0];
-    const bp = barbProfile(sp.nipL, sp.nipRo, sp.outRi, 4).map(([r, y]) => [r, B - sp.cone - y]).reverse();
-    add('pot', lathe(bp, 48), 0, { ex: exPot, cut: true });
-    add('pot', lathe([[sp.nipRo, B - sp.cone], [sp.ro, B], [sp.ro, B + sp.body]], 72), 0, { cut: true });
-    add('pot', lathe([[sp.ri, B + sp.body], [sp.ri, B], [sp.outRi, B - sp.cone]], 72), 0, { cut: true });
-    add('pot', lathe([[sp.outRi, B - sp.cone], [sp.nipRo, B - sp.cone]], 48), 0, { cut: true });
-    const top = B + sp.body;
-    add('pot', lathe([[sp.open / 2, top + sp.capT], [sp.capD / 2 - 1, top + sp.capT], [sp.capD / 2, top + sp.capT - 1], [sp.capD / 2, top], [sp.ri, top]], 72), 0, { cut: true });
-    const zI = sp.inletZ, x0 = Math.sqrt(Math.max(0, sp.ri * sp.ri - zI * zI)) - 2, yI = B + sp.inletY;
-    add('pot', sweep(linePts([x0, yI, zI], [sp.inletEnd[0] - 30, yI, zI], 4), sp.tubeRo, 32), 0, { cut: true });
-    add('pot', sweep(linePts([x0, yI, zI], [sp.inletEnd[0] - 30, yI, zI], 4), sp.tubeRo - sp.wall, 32), 0, { cut: true });
-    add('pot', along(lathe(barbProfile(30, sp.tubeRo, sp.tubeRo - sp.wall, 3), 32), [1, 0, 0]), 0, { center: [sp.inletEnd[0] - 30, yI, zI] });
-    // filler neck welded into the 1.0" opening, chrome pressure cap with ears and warning label, overflow nipple
-    const nb = top + sp.capT, nr = sp.open / 2;
-    add('pot', lathe([[nr - 1.2, nb - 2], [nr, nb - 2], [nr, nb + 18], [nr + 3, nb + 19], [nr + 7, nb + 19], [nr + 7.5, nb + 21], [nr - 1.2, nb + 21]], 56), 8, { cut: true });
-    add('pot', lathe([[0, nb + 32], [17, nb + 31], [21.5, nb + 29.5], [22.5, nb + 26], [22.5, nb + 21.5], [12, nb + 21.5]], 72), 22);
-    add('pot', merge([roundedBox(9, 6, 13, 2, 2), [24, nb + 25, 0]], [roundedBox(9, 6, 13, 2, 2), [-24, nb + 25, 0]]), 22);
-    add('pot', merge([cylinder(13, 0.8, 48), [0, nb + 32.2, 0]]), 23);
-    add('pot', merge([cylinder(4, 3, 24), [0, nb + 33.6, 0]]), 22);
-    this.overflowNip = [nr + 18, nb + 10, 0];
-    add('pot', sweep(linePts([nr - 1, nb + 10, 0], this.overflowNip, 3), 3.2, 16), 8);
-    add('pot', sweep(arcPts([this.overflowNip[0] - 3, nb + 10, 0], 3.7, 0, Math.PI * 2, 'yz', 18), 0.8, 6, true), 8);
-    // TIG welds
-    add('pot', ring([0, top + 0.6, 0], sp.ro + 0.5, 1.25, 'xz'), 7);
-    add('pot', ring([0, nb + 0.4, 0], nr + 0.6, 1.05, 'xz'), 7);
-    add('pot', ring([0, B - sp.cone - 0.3, 0], sp.nipRo + 0.4, 1.05, 'xz'), 7);
-    add('pot', ring([Math.sqrt(Math.max(0, sp.ro * sp.ro - zI * zI)) + 1.5, yI, zI], sp.tubeRo + 0.4, 1.15, 'yz'), 7);
-    // stainless band clamp + rubber liner + tab
-    add('pot', ring([0, B + 38, 0], sp.ro + 2.6, 1.9, 'xz'), 8);
-    add('pot', ring([0, B + 38, 0], sp.ro + 0.9, 1.0, 'xz'), 9);
-    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb) - sp.ro - 6, 1.5, 2), [0, B + 38, (F.zb - sp.ro - 4) / 2]]), 12);
-    // ================= pump: Davies Craig EBP40 (envelope approximate) =================
-    const pc = g.pump.c, exP = [120, 110, 120];
-    add('pump', merge([lathe([[0, -70], [26, -70], [30, -66], [31, -60], [31, 6], [33, 8], [33, 10], [0, 10]], 56), pc]), 6, { ex: exP });
-    { const rib = new GB(); for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; rib.add(roundedBox(3, 40, 3, 1, 1), [pc[0] + Math.cos(a) * 31.5, pc[1] - 40, pc[2] + Math.sin(a) * 31.5]); } add('pump', rib.done(), 6); }
-    add('pump', merge([lathe([[0, 10], [41, 10], [43, 13], [43, 40], [40, 44], [12, 46], [10, 46]], 64), pc]), 6);
-    add('pump', merge([roundedBox(26, 30, 30, 8, 3), [pc[0] + 30, pc[1] + 27, pc[2] + 22]]), 6);
-    add('pump', merge([cylinder(31.8, 6, 56), [pc[0], pc[1] - 18, 0]]), 23);
-    add('pump', merge([lathe(barbProfile(36, 9.5, 7.9, 3), 32), [pc[0], pc[1] + 46, 0]]), 6);
-    add('pump', along(lathe(barbProfile(40, 9.5, 7.9, 3), 32), [1, 0, 0]), 6, { center: [pc[0] + 40, pc[1] + 27, 0] });
-    add('pump', merge([roundedBox(14, 18, 12, 3, 2), [pc[0], pc[1] - 74, pc[2] - 14]]), 27);
-    wire('pump', [[pc[0] - 3, pc[1] - 80, pc[2] - 16], [pc[0] - 6, pc[1] - 110, pc[2] - 70], [pc[0] - 40, pc[1] - 120, F.zb + 16]], 1.6, 25);
-    wire('pump', [[pc[0] + 3, pc[1] - 80, pc[2] - 16], [pc[0] + 2, pc[1] - 112, pc[2] - 72], [pc[0] - 34, pc[1] - 124, F.zb + 16]], 1.6, 4);
-    add('pump', ring([pc[0], pc[1] - 30, 0], 33.5, 1.8, 'xz'), 8);
-    add('mounts', merge([roundedBox(25.4, 18, Math.abs(F.zb) - 36, 1.5, 2), [pc[0], pc[1] - 30, (F.zb - 36) / 2]]), 12);
-    // ================= Y fittings (billet aluminium) =================
-    const yfit = (c, flip, part, ex) => {
-      const sgn = flip ? -1 : 1, legs = [[[0, 46 * sgn, 0], 9.5, 7.9, 12], [[-31, -44 * sgn, 0], 0.4375 / 2 * 25.4, 4.2, 9], [[31, -44 * sgn, 0], 0.5625 / 2 * 25.4, 5.6, 10.5]];
-      const body = new GB();
-      body.add(roundedBox(30, 30, 38.1, 9, 5), [0, 0, 0]);
-      for (const [to, ro, ri, rArm] of legs) {
-        const d = nrm(to), L = Math.hypot(to[0], to[1]);
-        body.add(sweep(linePts([0, 0, 0], [d[0] * L * 0.5, d[1] * L * 0.5, 0], 2), rArm, 32), [0, 0, 0]);
-        body.add(along(hexNut(rArm + 2.5, 7), d), [d[0] * L * 0.52, d[1] * L * 0.52, 0]);
+    const basis = (m, ex, ey, ez) => xf(m, (v) => [v[0] * ex[0] + v[1] * ey[0] + v[2] * ez[0], v[0] * ex[1] + v[1] * ey[1] + v[2] * ez[1], v[0] * ex[2] + v[1] * ey[2] + v[2] * ez[2]]);
+    const yawM = (m, a) => { const c = Math.cos(a), s = Math.sin(a); return xf(m, (v) => [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c]); };
+    const route = (pts, step = 3) => smoothRoute(pts, step);
+    const cable = (part, pts, r, kind) => add(part, sweep(route(pts, 4), r, 12), kind);
+    const along2 = (p, d, L) => [p[0] + d[0] * L, p[1] + d[1] * L, p[2] + d[2] * L];
+    // tab from Tab_1in / Tab_2in.SLDPRT: straight plate with a full-round end and a hole on the round's centre
+    const TABS = { t1: { L: 25.4, W: 12.7, T: 6.35, rh: 3.175 }, t2: { L: 50.8, W: 25.4, T: 1.905, rh: 6.35 } };
+    const tabMesh = (k) => {
+      const t = TABS[k], hx = t.L - t.W / 2, n = 64, gb = new GB(), out = [], hole = [];
+      for (let i = 0; i <= n; i++) {
+        const a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+        let d = c > 0 ? t.W / 2 : Math.min(c < -1e-6 ? hx / -c : 1e9, Math.abs(s) > 1e-6 ? (t.W / 2) / Math.abs(s) : 1e9);
+        out.push([hx + c * d, s * d]); hole.push([hx + c * t.rh, s * t.rh]);
       }
-      add(part, merge([body.done(), c]), 0, { ex, cut: true });
-      const bb = new GB();
-      for (const [to, ro, ri] of legs) { const d = nrm(to), L = Math.hypot(to[0], to[1]) * 0.46; bb.add(along(lathe(barbProfile(L, ro, ri, 3), 32), d), [c[0] + to[0] - d[0] * L, c[1] + to[1] - d[1] * L, c[2]]); }
-      add(part, bb.done(), 8);
+      for (const [y, ny] of [[t.T, 1], [0, -1]]) { const b0 = gb.P.length / 3; for (let i = 0; i <= n; i++) { gb.v([hole[i][0], y, hole[i][1]], [0, ny, 0]); gb.v([out[i][0], y, out[i][1]], [0, ny, 0]); } for (let i = 0; i < n; i++) { const q = b0 + i * 2; if (ny > 0) gb.q(q, q + 2, q + 3, q + 1); else gb.q(q, q + 1, q + 3, q + 2); } }
+      const wall = (pts, inward) => { const b0 = gb.P.length / 3; for (let i = 0; i <= n; i++) { const p = pts[i], q = pts[(i + 1) % n], pr = pts[(i - 1 + n) % n]; let nx = q[1] - pr[1], nz = -(q[0] - pr[0]); const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; if (inward) { nx = -nx; nz = -nz; } gb.v([p[0], 0, p[1]], [nx, 0, nz]); gb.v([p[0], t.T, p[1]], [nx, 0, nz]); } for (let i = 0; i < n; i++) { const q = b0 + i * 2; gb.q(q, q + 2, q + 3, q + 1); } };
+      wall(out, false); wall(hole, true);
+      return gb.done();
     };
-    yfit(g.ySplit.c, false, 'ysplit', [0, 60, 170]);
-    yfit(g.yMerge.c, true, 'ymerge', [0, -40, 170]);
-    // ================= EMRAX 228 =================
-    const mc = g.motor.c, mR = g.motor.D / 2, mL = g.motor.L, exM = [-200, 0, 140];
-    const rim = []; rim.push([mR - 10, -mL / 2]); for (let k = 0; k <= 12; k++) { const y = -mL / 2 + 6 + k * (mL - 12) / 12; rim.push([k % 2 ? mR - 2.2 : mR, y]); } rim.push([mR - 6, mL / 2 - 1], [mR - 12, mL / 2]);
-    add('motor', xf(lathe(rim, 128), toZ), 14, { ex: exM, center: mc });
-    add('motor', xf(lathe([[36, mL / 2 - 4], [mR - 10, mL / 2 - 4]], 128), toZ), 18, { center: mc });
-    add('motor', xf(lathe([[40, mL / 2 - 14], [mR - 16, mL / 2 - 14]], 96), toZ), 19, { center: mc });
-    add('motor', xf(lathe([[mR - 14, mL / 2 - 14], [mR - 14, -mL / 2 + 10], [30, -mL / 2 + 10]], 96), toZ), 6, { center: mc });
-    add('motor', xf(lathe([[0, mL / 2 + 14], [26, mL / 2 + 14], [36, mL / 2 + 6], [38, mL / 2 - 4]], 64), toZ), 0, { center: mc });
-    add('motor', xf(lathe([[0, mL / 2 + 46], [17, mL / 2 + 46], [20, mL / 2 + 42], [20, mL / 2 + 14]], 48), toZ), 8, { center: mc });
-    { const bt = new GB(); for (let k = 0; k < 10; k++) { const a = (k + 0.5) / 10 * Math.PI * 2; bt.add(xf(hexNut(4.2, 4), toZ), [Math.cos(a) * (mR - 6), Math.sin(a) * (mR - 6), mL / 2 - 2]); } for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; bt.add(xf(hexNut(3.4, 4), toZ), [Math.cos(a) * 29, Math.sin(a) * 29, mL / 2 + 15]); } add('motor', bt.done(), 8, { center: mc }); }
-    add('motor', xf(lathe([[0, -mL / 2 - 10], [70, -mL / 2 - 10], [72, -mL / 2 - 8], [72, -mL / 2 + 2], [0, -mL / 2 + 2]], 72), toZ), 0, { center: mc });
-    { const fb = new GB(); for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; fb.add(xf(hexNut(4, 5), toZ), [Math.cos(a) * 60, Math.sin(a) * 60, -mL / 2 - 12]); } add('motor', fb.done(), 8, { center: mc }); }
-    for (const pp of [P.motorIn, P.motorOut]) add('motor', xf(lathe(barbProfile(26, 0.4375 / 2 * 25.4, 4.2, 3), 28), toNZ), 0, { center: [pp[0], pp[1], pp[2] + 26] });
-    // phase-lead glands on the stator side
-    const glands = [[-30, 52], [0, 58], [30, 52]];
-    for (const [gx, gy] of glands) add('motor', xf(cylinder(8, 14, 24), toZ), 15, { center: [mc[0] + gx, mc[1] + gy, -mL / 2 - 16] });
-    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 90, mc[1], (F.zb - mL / 2 - 12) / 2]], [roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 50, mc[1] + 90, (F.zb - mL / 2 - 12) / 2]], [roundedBox(25.4, 22, Math.abs(F.zb) - mL / 2 - 12, 1.5, 2), [mc[0] - 50, mc[1] - 90, (F.zb - mL / 2 - 12) / 2]]), 12);
-    // ================= DTI HV-500LC =================
-    const ic = g.inv.c, iL = g.inv.L, iH = g.inv.Hh, iW = g.inv.Wd, exI = [200, 0, 140];
-    add('inv', roundedBox(iL, iH - 10, iW, 6, 4), 13, { ex: exI, center: [ic[0], ic[1] - 5, ic[2]] });
-    add('inv', roundedBox(iL - 16, 10, iW - 16, 4, 3), 13, { center: [ic[0], ic[1] + iH / 2 - 6, ic[2]] });
-    { const sc = new GB(); for (let k = 0; k < 7; k++) for (const zz of [-1, 1]) sc.add(cylinder(2.6, 1.6, 12), [ic[0] - iL / 2 + 20 + k * (iL - 40) / 6, ic[1] + iH / 2 - 0.6, ic[2] + zz * (iW / 2 - 14)]); add('inv', sc.done(), 8); }
-    add('inv', roundedBox(110, 1, 46, 3, 2), 21, { center: [ic[0] - 60, ic[1] + iH / 2, ic[2] + 30] });
-    { const ear = new GB(); for (const sx of [-1, 1]) for (const sz of [-1, 1]) { ear.add(roundedBox(26, 8, 22, 3, 2), [ic[0] + sx * (iL / 2 - 30), ic[1] - iH / 2 + 4, ic[2] + sz * (iW / 2 + 9)]); } add('inv', ear.done(), 13); }
-    const hvx = ic[0] + iL / 2 + 6, conn = [[ic[1] + 4, ic[2] + 62], [ic[1] + 4, ic[2] + 20], [ic[1] + 4, ic[2] - 22], [ic[1] + 4, ic[2] - 64]];
-    for (const [cy, cz] of conn) add('inv', xf(roundedBox(30, 24, 30, 5, 2), (v) => v), 15, { center: [hvx + 4, cy, cz] });
-    add('inv', roundedBox(26, 18, 40, 3, 2), 27, { center: [ic[0] - iL / 2 + 60, ic[1] + 10, ic[2] - iW / 2 - 8] });
-    for (const pp of [P.invIn, P.invOut]) add('inv', along(sweep(linePts([0, 0, 0], [0, 34, 0], 2), 7, 24), [-1, 0, 0]), 0, { center: [pp[0] + 34, pp[1], pp[2]] });
-    // orange HV cables: three phases to the motor, DC pair out to the accumulator
-    const mrear = [mc[0], mc[1], -mL / 2 - 24];
+    // weld a tab to a tube: w = weld point on the tube surface, d = toward the part, nn = plate normal
+    const tab = (k, w, d, nn, boltLen = 16) => {
+      const t = TABS[k], dz = cross(d, nn), m = basis(tabMesh(k), d, nn, dz), c = [w[0] - nn[0] * t.T / 2, w[1] - nn[1] * t.T / 2, w[2] - nn[2] * t.T / 2];
+      add('mounts', merge([m, c]), 12);
+      add('mounts', sweep(linePts([c[0] - dz[0] * t.W / 2 + nn[0] * t.T / 2, c[1] - dz[1] * t.W / 2 + nn[1] * t.T / 2, c[2] - dz[2] * t.W / 2 + nn[2] * t.T / 2], [c[0] + dz[0] * t.W / 2 + nn[0] * t.T / 2, c[1] + dz[1] * t.W / 2 + nn[1] * t.T / 2, c[2] + dz[2] * t.W / 2 + nn[2] * t.T / 2], 3), 1.3, 8), 7);
+      const hc = along2(along2(c, d, t.L - t.W / 2), nn, t.T / 2);
+      add('mounts', merge([along(cylinder(t.rh * 0.92, boltLen, 16), nn), hc], [along(hexNut(t.rh * 1.9, t.rh * 1.2), nn), along2(hc, nn, boltLen / 2)], [along(hexNut(t.rh * 1.9, t.rh * 1.2), nn), along2(hc, nn, -boltLen / 2)]), 8);
+      return hc;
+    };
+    // ================= swirl pot V3 (built about its axis, then turned to point the tangential inlet at the return line) =================
+    const sp = g.pot, B = sp.base, exPot = [-60, 140, 40], pc0 = [sp.c[0], 0, sp.c[2]], potItem = (m, kind, o = {}) => add('pot', yawM(m, sp.yaw), kind, { ex: exPot, center: pc0, cutC: o.cut ? sp.c : null, ...o });
+    potItem(lathe(barbProfile(sp.nipL, sp.nipRo, sp.outRi, 4).map(([r, y]) => [r, B - sp.cone - y]).reverse(), 48), 0, { cut: true });
+    potItem(lathe([[sp.nipRo, B - sp.cone], [sp.ro, B], [sp.ro, B + sp.body]], 72), 0, { cut: true });
+    potItem(lathe([[sp.ri, B + sp.body], [sp.ri, B], [sp.outRi, B - sp.cone]], 72), 0, { cut: true });
+    potItem(lathe([[sp.outRi, B - sp.cone], [sp.nipRo, B - sp.cone]], 48), 0, { cut: true });
+    const top = B + sp.body;
+    potItem(lathe([[sp.open / 2, top + sp.capT], [sp.capD / 2 - 1, top + sp.capT], [sp.capD / 2, top + sp.capT - 1], [sp.capD / 2, top], [sp.ri, top]], 72), 0, { cut: true });
+    const zI = sp.inletZ, x0 = Math.sqrt(Math.max(0, sp.ri * sp.ri - zI * zI)) - 2, yI = B + sp.inletY, xE = sp.ri + 62;
+    potItem(sweep(linePts([x0, yI, zI], [xE - 30, yI, zI], 4), sp.tubeRo, 32), 0, { cut: true });
+    potItem(sweep(linePts([x0, yI, zI], [xE - 30, yI, zI], 4), sp.tubeRo - sp.wall, 32), 0, { cut: true });
+    potItem(along(lathe(barbProfile(30, sp.tubeRo, sp.tubeRo - sp.wall, 3), 32), [1, 0, 0]), 0, { center: [pc0[0], 0, pc0[2]] });
+    this.items[this.items.length - 1].mesh = this.up(merge([yawM(along(lathe(barbProfile(30, sp.tubeRo, sp.tubeRo - sp.wall, 3), 32), [1, 0, 0]), sp.yaw), (() => { const c = Math.cos(sp.yaw), s = Math.sin(sp.yaw), lx = xE - 30; return [lx * c + zI * s, yI, -lx * s + zI * c]; })()]));
+    const nb = top + sp.capT, nr = sp.open / 2;
+    potItem(lathe([[nr - 1.2, nb - 2], [nr, nb - 2], [nr, nb + 18], [nr + 3, nb + 19], [nr + 7, nb + 19], [nr + 7.5, nb + 21], [nr - 1.2, nb + 21]], 56), 8, { cut: true });
+    potItem(lathe([[0, nb + 32], [17, nb + 31], [21.5, nb + 29.5], [22.5, nb + 26], [22.5, nb + 21.5], [12, nb + 21.5]], 72), 22);
+    potItem(merge([roundedBox(9, 6, 13, 2, 2), [24, nb + 25, 0]], [roundedBox(9, 6, 13, 2, 2), [-24, nb + 25, 0]]), 22);
+    potItem(merge([cylinder(13, 0.8, 48), [0, nb + 32.2, 0]]), 23);
+    potItem(merge([cylinder(4, 3, 24), [0, nb + 33.6, 0]]), 22);
+    potItem(ring([0, top + 0.6, 0], sp.ro + 0.5, 1.25, 'xz'), 7);
+    potItem(ring([0, nb + 0.4, 0], nr + 0.6, 1.05, 'xz'), 7);
+    potItem(ring([0, B - sp.cone - 0.3, 0], sp.nipRo + 0.4, 1.05, 'xz'), 7);
+    potItem(ring([Math.sqrt(Math.max(0, sp.ro * sp.ro - zI * zI)) + 1.5, yI, zI], sp.tubeRo + 0.4, 1.15, 'yz'), 7);
+    // overflow / bleed nipple on the cap neck, aimed at the catch can (world coordinates)
+    const cc = g.catchCan.c, cR = g.catchCan.D / 2, cH = g.catchCan.H, toCan = nrm([cc[0] - sp.c[0], 0, cc[2] - sp.c[2]]);
+    const nip0 = [sp.c[0] + toCan[0] * (nr - 1), nb + 10, sp.c[2] + toCan[2] * (nr - 1)], nipTip = along2(nip0, toCan, 19);
+    this.overflowNip = nipTip;
+    add('pot', sweep(linePts(nip0, nipTip, 3), 3.2, 16), 8);
+    // band clamp on the pot, ear bolted to a 2 in tab on the rear top cross tube
+    const clampY = B + 36, earDir = [1, 0, 0];
+    add('pot', ring([sp.c[0], clampY, sp.c[2]], sp.ro + 2.6, 1.9, 'xz'), 8);
+    add('pot', ring([sp.c[0], clampY, sp.c[2]], sp.ro + 0.9, 1.0, 'xz'), 9);
+    const potTabX = sp.c[0] + sp.ro + 12;
+    const hcPot = tab('t2', [potTabX, F.yt, -22 - 12.7], [0, 0, -1], [1, 0, 0]);
+    add('pot', merge([roundedBox(14, 10, Math.abs(hcPot[2] - sp.c[2]) + 4, 2, 2), [potTabX - 8, clampY, (hcPot[2] + sp.c[2]) / 2]]), 8);
+    // ================= Davies Craig EBP40 (proportions from Pump_V1.SLDPRT: 145 mm overall) =================
+    const pc = g.pump.c, exP = [-60, 0, 100], pumpItem = (m, kind, o = {}) => add('pump', yawM(m, g.pump.yaw), kind, { ex: exP, center: pc, ...o });
+    pumpItem(lathe([[0, -66], [30, -66], [35, -63], [37, -58], [37, -32], [36.2, -31], [36.2, -29], [37, -28], [37, -8], [0, -8]], 72), 6);
+    { const bs = new GB(); for (const a of [0.6, 2.55, 4.4]) { bs.add(roundedBox(9, 50, 9, 3, 2), [Math.cos(a) * 40, -36, Math.sin(a) * 40]); bs.add(cylinder(2, 4, 12), [Math.cos(a) * 40, -9, Math.sin(a) * 40]); } pumpItem(bs.done(), 6); }
+    pumpItem(lathe([[0, -8], [42, -8], [44, -5], [44, 22], [41, 28], [18, 38], [15, 42], [0, 42]], 72), 6);
+    { const lg = new GB(), sc = new GB(); for (let k = 0; k < 6; k++) { const a = (k + 0.5) / 6 * Math.PI * 2; lg.add(cylinder(6, 30, 18), [Math.cos(a) * 46, 7, Math.sin(a) * 46]); sc.add(cylinder(3.5, 3, 16), [Math.cos(a) * 46, 23.5, Math.sin(a) * 46]); } pumpItem(lg.done(), 6); pumpItem(sc.done(), 8); }
+    { const rb = new GB(); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; rb.add(sweep(linePts([Math.cos(a) * 16, 41, Math.sin(a) * 16], [Math.cos(a) * 40, 27, Math.sin(a) * 40], 2), 1.6, 8), [0, 0, 0]); } pumpItem(rb.done(), 6); }
+    pumpItem(merge([cylinder(14, 8, 40), [0, 44, 0]], [lathe(barbProfile(30, 9.5, 7.9, 3), 40), [0, 48, 0]]), 6);
+    pumpItem(merge([sweep(linePts([-20, 12, 18], [-20, 12, 42], 2), 12, 32), [0, 0, 0]], [along(lathe(barbProfile(33, 9.5, 7.9, 3), 40), [0, 0, 1]), [-20, 12, 42]]), 6);
+    pumpItem(merge([roundedBox(18, 14, 16, 3, 2), [0, -60, -34]]), 27);
+    pumpItem(merge([cylinder(37.4, 5, 64), [0, -18, 0]]), 23);
+    cable('pump', [[pc[0], pc[1] - 66, pc[2] - 34], [pc[0], pc[1] - 90, pc[2] - 34], [pc[0] - 40, pc[1] - 110, pc[2] - 20], [pc[0] - 120, 215, pc[2]]], 1.6, 25);
+    { const hc = tab('t1', [-F.xb + 12.7, 300, pc[2] + 44], [1, 0, 0], [0, 0, 1], 14); add('pump', merge([roundedBox(Math.abs(hc[0] - (pc[0] - 30)) + 6, 10, 6, 2, 2), [(hc[0] + pc[0] - 30) / 2, hc[1], pc[2] + 41]], [roundedBox(10, 10, 40, 2, 2), [pc[0] - 30, hc[1], pc[2] + 22]]), 8); }
+    // ================= Y fittings (billet aluminium), oriented by the route optimiser =================
+    const yfit = (Y, part, ex) => {
+      const legs = [[[0, 46, 0], 9.5, 7.9, 12], [[-31, -44, 0], 0.4375 / 2 * 25.4, 4.2, 9], [[31, -44, 0], 0.5625 / 2 * 25.4, 5.6, 10.5]];
+      const body = new GB(); body.add(roundedBox(30, 30, 38.1, 9, 5), [0, 0, 0]);
+      for (const [to, , , rArm] of legs) { const d = nrm(to), Lg = Math.hypot(to[0], to[1]); body.add(sweep(linePts([0, 0, 0], [d[0] * Lg * 0.5, d[1] * Lg * 0.5, 0], 2), rArm, 32), [0, 0, 0]); body.add(along(hexNut(rArm + 2.5, 7), d), [d[0] * Lg * 0.52, d[1] * Lg * 0.52, 0]); }
+      const bb = new GB(); for (const [to, ro, ri] of legs) { const d = nrm(to), Lg = Math.hypot(to[0], to[1]) * 0.46; bb.add(along(lathe(barbProfile(Lg, ro, ri, 3), 32), d), [to[0] - d[0] * Lg, to[1] - d[1] * Lg, 0]); }
+      add(part, merge([basis(body.done(), Y.s, Y.t, Y.n), Y.c]), 0, { ex, cutC: Y.c });
+      add(part, merge([basis(bb.done(), Y.s, Y.t, Y.n), Y.c]), 8);
+    };
+    yfit(g.ySplit, 'ysplit', [-80, -40, 0]);
+    yfit(g.yMerge, 'ymerge', [-80, 60, -40]);
+    // ================= EMRAX 228: near the rear, axis across the car, face + sprocket right (+x), stator + ports left (−x) =================
+    const mc = g.motor.c, mR = g.motor.D / 2, mL = g.motor.L, exM = [160, 0, -40], toW = (v) => [v[2], v[1], -v[0]];
+    const motorItem = (m, kind, o = {}) => add('motor', xf(m, toW), kind, { ex: exM, center: mc, ...o });
+    const rim = [[mR - 10, -mL / 2]]; for (let k = 0; k <= 12; k++) { const y = -mL / 2 + 6 + k * (mL - 12) / 12; rim.push([k % 2 ? mR - 2.2 : mR, y]); } rim.push([mR - 6, mL / 2 - 1], [mR - 12, mL / 2]);
+    motorItem(xf(lathe(rim, 128), toZ), 14);
+    motorItem(xf(lathe([[36, mL / 2 - 4], [mR - 10, mL / 2 - 4]], 128), toZ), 18);
+    motorItem(xf(lathe([[40, mL / 2 - 14], [mR - 16, mL / 2 - 14]], 96), toZ), 19);
+    motorItem(xf(lathe([[mR - 14, mL / 2 - 14], [mR - 14, -mL / 2 + 10], [30, -mL / 2 + 10]], 96), toZ), 6);
+    motorItem(xf(lathe([[0, mL / 2 + 14], [26, mL / 2 + 14], [36, mL / 2 + 6], [38, mL / 2 - 4]], 64), toZ), 0);
+    motorItem(xf(lathe([[0, mL / 2 + 46], [17, mL / 2 + 46], [20, mL / 2 + 42], [20, mL / 2 + 14]], 48), toZ), 8);
+    { const bt = new GB(); for (let k = 0; k < 10; k++) { const a = (k + 0.5) / 10 * Math.PI * 2; bt.add(xf(hexNut(4.2, 4), toZ), [Math.cos(a) * (mR - 6), Math.sin(a) * (mR - 6), mL / 2 - 2]); } for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; bt.add(xf(hexNut(3.4, 4), toZ), [Math.cos(a) * 29, Math.sin(a) * 29, mL / 2 + 15]); } motorItem(bt.done(), 8); }
+    motorItem(xf(lathe([[0, -mL / 2 - 10], [70, -mL / 2 - 10], [72, -mL / 2 - 8], [72, -mL / 2 + 2], [0, -mL / 2 + 2]], 72), toZ), 0);
+    { const fb = new GB(); for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; fb.add(xf(hexNut(4, 5), toZ), [Math.cos(a) * 60, Math.sin(a) * 60, -mL / 2 - 12]); } motorItem(fb.done(), 8); }
+    motorItem(merge([xf(lathe([[20, -3], [60, -3], [64, -1], [64, 1], [60, 3], [20, 3]], 120), toZ), [0, 0, mL / 2 + 34]]), 8);
+    for (const k of ['motorIn', 'motorOut']) add('motor', along(lathe(barbProfile(28, 0.4375 / 2 * 25.4, 4.2, 3), 28), PD[k]), 0, { center: along2(P[k], PD[k], -28) });
+    for (const k of ['motorIn', 'motorOut']) add('motor', sweep(linePts([mc[0] - mL / 2 + 2, P[k][1], P[k][2]], [P[k][0] + 26, P[k][1], P[k][2]], 2), 8, 20), 0);
+    const glands = [[-58, 46], [-58, 0], [-58, -46]].map(([gz, gy]) => [mc[0] - mL / 2 - 6, mc[1] + gy + 40, mc[2] + gz - 40]);
+    for (const gp of glands) add('motor', along(cylinder(8, 16, 24), [-1, 0, 0]), 15, { center: gp });
+    // ================= DTI HV-500LC: forward of the motor, standing across the car (420 wide in x, 213 tall, 77 thick in z) =================
+    const ic = g.inv.c, iL = g.inv.L, iH = g.inv.Hh, iW = g.inv.Wd, exI = [0, 0, 140];
+    add('inv', roundedBox(iL, iW, iH - 10, 6, 4), 13, { ex: exI, center: [ic[0], ic[1], ic[2] + 5] });
+    add('inv', roundedBox(iL - 16, iW - 16, 10, 4, 3), 13, { center: [ic[0], ic[1], ic[2] + iH / 2 - 6] });
+    { const sc = new GB(); for (let k = 0; k < 7; k++) for (const yy of [-1, 1]) sc.add(xf(cylinder(2.6, 1.6, 12), toZ), [ic[0] - iL / 2 + 20 + k * (iL - 40) / 6, ic[1] + yy * (iW / 2 - 14), ic[2] + iH / 2 - 0.6]); add('inv', sc.done(), 8); }
+    add('inv', roundedBox(110, 46, 1, 2, 2), 21, { center: [ic[0] + 60, ic[1] + 40, ic[2] + iH / 2] });
+    const conn = [[ic[0] + 170, ic[1] + 60], [ic[0] + 130, ic[1] + 60], [ic[0] + 90, ic[1] + 60], [ic[0] + 50, ic[1] + 60]];
+    const zBack = ic[2] - iH / 2;
+    for (const [cx, cy] of conn) add('inv', roundedBox(30, 30, 24, 5, 2), 15, { center: [cx, cy, zBack - 6] });
+    add('inv', roundedBox(40, 26, 18, 3, 2), 27, { center: [ic[0] + 150, ic[1] - 60, zBack - 8] });
+    for (const k of ['invIn', 'invOut']) add('inv', merge([along(sweep(linePts([0, 0, 0], [0, 34, 0], 2), 7, 24), [0, 0, -1]), along2(P[k], [0, 0, 1], 34)], [along(hexNut(11, 6), [0, 0, -1]), along2(P[k], [0, 0, 1], 31)]), 0);
+    // HV cables: three phases from the rear-face connectors to the EMRAX glands (stator side), DC pair forward to the accumulator
     for (let k = 0; k < 3; k++) {
-      const [cy, cz] = conn[k + 1], [gx, gy] = glands[k];
-      wire('hv', [[hvx + 18, cy, cz], [hvx + 50, cy - 10, cz - 20], [hvx + 40, ic[1] - 80 - k * 12, -150], [ic[0] - 80, ic[1] - 100 - k * 12, -172 + k * 4], [mc[0] + 40, mc[1] - 60 - k * 10, -170 + k * 4], [mc[0] + gx * 1.3, mc[1] + gy + 40, -mL / 2 - 70], [mc[0] + gx, mc[1] + gy, -mL / 2 - 22]], 6.2, 15);
+      const [cx, cy] = conn[k + 1], c0 = [cx, cy, zBack - 18], gp = glands[k];
+      cable('hv', [c0, along2(c0, [0, 0, -1], 30), along2(c0, [0, 0, -1], 70), [cx - 90 - k * 10, cy + 30 - k * 8, zBack - 120], [gp[0] - 60, gp[1] + 10, gp[2] + 40], along2(gp, [-1, 0, 0], 40), along2(gp, [-1, 0, 0], 8)], 6.2, 15);
     }
-    wire('hv', [[hvx + 18, conn[0][0], conn[0][1]], [hvx + 70, conn[0][0] - 10, conn[0][1] + 10], [hvx + 110, ic[1] - 140, 40], [hvx + 120, F.y0 + 30, 0]], 6.2, 15);
-    wire('hv', [[ic[0] - iL / 2 + 60, ic[1] + 10, ic[2] - iW / 2 - 28], [ic[0] - iL / 2 + 40, ic[1] + 40, F.zb + 40], [ic[0] - iL / 2 - 60, ic[1] + 60, F.zb + 16]], 3.2, 4);
-    add('mounts', merge([roundedBox(25.4, 18, Math.abs(F.zb) - iW / 2 - 18, 1.5, 2), [ic[0] - iL / 2 + 30, ic[1] - iH / 2 + 4, (F.zb - iW / 2 - 18) / 2]], [roundedBox(25.4, 18, Math.abs(F.zb) - iW / 2 - 18, 1.5, 2), [ic[0] + iL / 2 - 30, ic[1] - iH / 2 + 4, (F.zb - iW / 2 - 18) / 2]]), 12);
+    { const [cx, cy] = conn[0], c0 = [cx, cy, zBack - 18]; cable('hv', [c0, along2(c0, [0, 0, -1], 30), [cx + 20, cy + 60, zBack - 50], [cx + 20, cy + 120, ic[2] + 30], [cx + 10, cy + 140, -60]], 6.2, 15); }
+    cable('hv', [[ic[0] + 150, ic[1] - 60, zBack - 17], [ic[0] + 150, ic[1] - 60, zBack - 50], [ic[0] + 190, ic[1] - 100, zBack - 40], [ic[0] + 205, 80, -150]], 3.2, 4);
+    tab('t2', [ic[0] - 120, F.yb + 12.7, -390 + 12.7 + 2], [0, 1, 0], [0, 0, 1]);
+    tab('t2', [ic[0] + 120, F.yb + 12.7, -390 + 12.7 + 2], [0, 1, 0], [0, 0, 1]);
     // ================= radiator =================
-    const rc = g.rad.c, R = g.rad, exR = [0, -110, 170];
+    const rc = g.rad.c, R = g.rad, exR = [0, 0, -100];
     const N = radR.N, rows = radR.rows, Th = RADCORE.Th, Fl = RADCORE.Fl, coreH = N * Th + rows * Fl;
     this.rad = { c: rc, N, rows, coreH, W: R.coreW, D: R.coreD };
     const inst = [], y0 = rc[1] - coreH / 2; this.tubeY = [];
     for (let t = 0; t < N; t++) { const y = y0 + Fl * (t + 1) + Th * (t + 0.5); this.tubeY.push(y); inst.push(rc[0], y, rc[2], 0, 0, t, 0); }
     for (let k = 0; k < rows; k++) inst.push(rc[0], y0 + k * (Fl + Th) + Fl / 2, rc[2], 0, 0, k, 0);
     const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inst), gl.STATIC_DRAW);
-    add('radiator', stadiumTube(R.coreW + 8, Th, R.coreD), 1, { ex: exR, inst: { base: 0, count: N }, cut: true });
-    add('radiator', finRow(R.coreW, Fl, R.coreD, RADCORE.Fp), 2, { inst: { base: N, count: rows }, cut: true });
+    add('radiator', stadiumTube(R.coreW + 8, Th, R.coreD), 1, { ex: exR, inst: { base: 0, count: N }, cutC: rc });
+    add('radiator', finRow(R.coreW, Fl, R.coreD, RADCORE.Fp), 2, { inst: { base: N, count: rows }, cutC: rc });
     for (const sx of [-1, 1]) {
       const tx = rc[0] + sx * (R.coreW / 2 + R.tankW / 2), hx = rc[0] + sx * (R.coreW / 2 + 1.6);
-      add('radiator', merge([roundedBox(R.tankW, R.H, R.D, Math.min(R.tankW, R.D) * 0.42, 7), [tx, rc[1], rc[2]]]), 0, { cut: true });
-      add('radiator', merge([roundedBox(3.2, R.H + 4, R.D + 4, 1.4, 3), [hx, rc[1], rc[2]]]), 8, { cut: true });
+      add('radiator', merge([roundedBox(R.tankW, R.H, R.D, Math.min(R.tankW, R.D) * 0.42, 7), [tx, rc[1], rc[2]]]), 0, { cutC: rc });
+      add('radiator', merge([roundedBox(3.2, R.H + 4, R.D + 4, 1.4, 3), [hx, rc[1], rc[2]]]), 8, { cutC: rc });
       const rr = Math.min(R.tankW, R.D) * 0.42, aa = R.H / 2 - rr, bbz = R.D / 2 - rr, seg = (cy, cz, a0) => arcPts([0, cy, cz], rr + 0.2, a0, a0 + Math.PI / 2, 'yz', 8);
-      add('radiator', merge([sweep(joinPts(seg(aa, bbz, 0), seg(-aa, bbz, Math.PI / 2), seg(-aa, -bbz, Math.PI), seg(aa, -bbz, Math.PI * 1.5)), 1.15, 10, true), [rc[0] + sx * (R.coreW / 2 + 3.4), rc[1], rc[2]]]), 7, { cut: true });
-      add('radiator', merge([roundedBox(20, 12, 5, 2, 2), [tx, rc[1] - R.H / 2 - 6, -R.D / 2 + 8]]), 0);
-      add('mounts', merge([sweep(arcPts([tx, rc[1] - R.H / 2 - 8, -R.D / 2 + 8], 4.8, 0, Math.PI * 2, 'xy', 24), 2.3, 10, true), [0, 0, 0]], [xf(cylinder(2.6, 18, 6), toZ), [tx, rc[1] - R.H / 2 - 8, -R.D / 2 + 8]]), 9);
+      add('radiator', merge([sweep(joinPts(seg(aa, bbz, 0), seg(-aa, bbz, Math.PI / 2), seg(-aa, -bbz, Math.PI), seg(aa, -bbz, Math.PI * 1.5)), 1.15, 10, true), [rc[0] + sx * (R.coreW / 2 + 3.4), rc[1], rc[2]]]), 7);
+      // outside the chassis: tank bracket → rubber isolator → 2 in tab welded to the rear lower cross tube
+      const bx = tx + sx * (R.tankW / 2 + 3);
+      const hc = tab('t2', [bx + sx * 1, F.yb, F.zr - 12.7], [0, 0, -1], [sx, 0, 0], 20);
+      add('radiator', merge([roundedBox(5, rc[1] - R.H / 2 - hc[1] + 14, 22, 1.5, 2), [bx, (hc[1] + rc[1] - R.H / 2) / 2 + 6, hc[2]]]), 0);
+      add('mounts', merge([along(sweep(arcPts([0, 0, 0], 5, 0, Math.PI * 2, 'xy', 24), 2.4, 10, true), [1, 0, 0]), [bx - sx * 1.5, hc[1], hc[2]]]), 9);
     }
     add('radiator', merge([roundedBox(R.coreW + 4, 2.4, R.coreD - 2, 1, 2), [rc[0], rc[1] + coreH / 2 + 1.2, rc[2]]], [roundedBox(R.coreW + 4, 2.4, R.coreD - 2, 1, 2), [rc[0], rc[1] - coreH / 2 - 1.2, rc[2]]]), 0);
     add('radiator', merge([lathe(barbProfile(38, 9.5, 7.9, 3), 32), g.radIn]), 0);
-    add('radiator', along(lathe(barbProfile(38, 9.5, 7.9, 3), 32), [1, 0, 0]), 0, { center: [g.radOut[0] + 19, g.radOut[1], 0] });
-    add('radiator', merge([ring([g.radIn[0], g.radIn[1] + 0.6, 0], 9.9, 1.0, 'xz'), [0, 0, 0]]), 7);
-    add('radiator', merge([ring([g.radOut[0] + 0.6, g.radOut[1], 0], 9.9, 1.0, 'yz'), [0, 0, 0]]), 7);
-    add('mounts', merge([roundedBox(25.4, 8, Math.abs(F.zb) - R.D / 2 + 8, 1.5, 2), [rc[0] - R.coreW / 2 - R.tankW / 2, rc[1] - R.H / 2 - 16, (F.zb - R.D / 2 + 8) / 2]], [roundedBox(25.4, 8, Math.abs(F.zb) - R.D / 2 + 8, 1.5, 2), [rc[0] + R.coreW / 2 + R.tankW / 2, rc[1] - R.H / 2 - 16, (F.zb - R.D / 2 + 8) / 2]]), 12);
-    // ================= shroud + SPAL fan =================
-    const zS0 = rc[2] - R.coreD / 2, zS1 = zS0 - g.shroudLen, exF = [0, -110, -40];
-    add('shroud', merge([shroudLoft(R.coreW + 6, R.coreH + 6, g.fan.D / 2 + 2, zS0, zS1), [rc[0], rc[1], 0]]), 16, { ex: exF });
-    { const fw = R.coreW + 6, fh = R.coreH + 6, t = 10; add('shroud', merge([roundedBox(fw + 2 * t, t, 3, 1, 2), [rc[0], rc[1] + fh / 2 + t / 2, zS0 - 1.5]], [roundedBox(fw + 2 * t, t, 3, 1, 2), [rc[0], rc[1] - fh / 2 - t / 2, zS0 - 1.5]], [roundedBox(t, fh, 3, 1, 2), [rc[0] - fw / 2 - t / 2, rc[1], zS0 - 1.5]], [roundedBox(t, fh, 3, 1, 2), [rc[0] + fw / 2 + t / 2, rc[1], zS0 - 1.5]]), 16); }
-    add('shroud', merge([xf(lathe([[g.fan.D / 2 + 2, 0], [g.fan.D / 2 + 9, 0], [g.fan.D / 2 + 9, 3], [g.fan.D / 2 + 2, 3]], 96), toZ), [rc[0], rc[1], zS1 - 3]]), 16);
-    const fc = g.fan.c, fR = g.fan.D / 2, exFan = [0, -110, -140];
-    add('fan', merge([xf(lathe([[fR - 4, -15], [fR, -15], [fR, 13], [fR + 3, 15], [fR - 4, 15], [fR - 4, -15]], 112), toZ), [fc[0], fc[1], fc[2] + 11]]), 6, { ex: exFan });
-    { const ears = new GB(), bolts = new GB(); for (const [ax, ay] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const ex_ = fc[0] + ax * g.fan.holes / 2, ey = fc[1] + ay * g.fan.holes / 2; ears.add(roundedBox(26, 26, 5, 6, 3), [ex_ - ax * 6, ey - ay * 6, fc[2] + 24]); ears.add(sweep(linePts([fc[0] + ax * fR * 0.66, fc[1] + ay * fR * 0.66, fc[2] + 24], [ex_ - ax * 8, ey - ay * 8, fc[2] + 24], 2), 4, 10), [0, 0, 0]); bolts.add(xf(hexNut(5, 6), toZ), [ex_, ey, fc[2] + 28]); bolts.add(xf(cylinder(3.25, 14, 12), toZ), [ex_, ey, fc[2] + 22]); } add('fan', ears.done(), 6); add('fan', bolts.done(), 8); }
-    add('fan', merge([xf(lathe([[0, -34], [30, -34], [34, -30], [34, 8], [0, 8]], 64), toZ), [fc[0], fc[1], fc[2] - 4]]), 6);
-    add('fan', merge([xf(cylinder(22, 0.8, 48), toZ), [fc[0], fc[1], fc[2] - 38.6]]), 21);
-    { const st = new GB(); for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; st.add(sweep(linePts([Math.cos(a) * 32, Math.sin(a) * 32, 0], [Math.cos(a) * (fR - 3), Math.sin(a) * (fR - 3), 0], 2), 2.6, 10), [fc[0], fc[1], fc[2] - 16]); } add('fan', st.done(), 6); }
-    add('fan', bladeMesh(fR - 6, 36, 10), 6, { spin: [fc[0], fc[1], fc[2] + 8] });
-    wire('fan', [[fc[0] + 20, fc[1] - 30, fc[2] - 34], [fc[0] + 60, fc[1] - 70, fc[2] - 50], [fc[0] + 160, fc[1] - 60, F.zb + 16]], 1.8, 4);
-    // ================= catch can =================
-    const cc = g.catchCan.c, cR = g.catchCan.D / 2, cH = g.catchCan.H, exC = [-180, 160, -110];
-    const body = [[0, -cH / 2], [cR - 4, -cH / 2], [cR, -cH / 2 + 4]]; for (let k = 0; k < 6; k++) { const y = -cH / 2 + 14 + k * 3.2; body.push([cR, y], [cR - 1.2, y + 1.2], [cR, y + 2.4]); } body.push([cR, cH / 2 - 10], [cR - 1, cH / 2 - 6], [cR - 3, cH / 2 - 6]);
+    add('radiator', along(lathe(barbProfile(38, 9.5, 7.9, 3), 32), [1, 0, 0]), 0, { center: [g.radOut[0] + 19, g.radOut[1], g.radOut[2]] });
+    add('radiator', merge([ring([g.radIn[0], g.radIn[1] + 0.6, g.radIn[2]], 9.9, 1.0, 'xz'), [0, 0, 0]], [ring([g.radOut[0] + 0.6, g.radOut[1], g.radOut[2]], 9.9, 1.0, 'yz'), [0, 0, 0]]), 7);
+    // ================= shroud (core face → twin fan plate, 3D printed) + two 4 in fans =================
+    const zS0 = rc[2] - R.coreD / 2, zS1 = zS0 - g.shroudLen, exF = [0, 0, -160], fw = R.coreW + 6, fh = R.coreH + 6, tw = 3;
+    add('shroud', merge([roundedBox(fw + 2 * tw, tw, g.shroudLen, 1, 1), [rc[0], rc[1] + fh / 2 + tw / 2, (zS0 + zS1) / 2]], [roundedBox(fw + 2 * tw, tw, g.shroudLen, 1, 1), [rc[0], rc[1] - fh / 2 - tw / 2, (zS0 + zS1) / 2]], [roundedBox(tw, fh, g.shroudLen, 1, 1), [rc[0] - fw / 2 - tw / 2, rc[1], (zS0 + zS1) / 2]], [roundedBox(tw, fh, g.shroudLen, 1, 1), [rc[0] + fw / 2 + tw / 2, rc[1], (zS0 + zS1) / 2]]), 16, { ex: exF });
+    const fD = g.fans.D, fR = fD / 2, fxs = [-g.fans.pitch / 2, g.fans.pitch / 2];
+    for (const fx of fxs) add('shroud', merge([annulusPlate((fw + 2 * tw) / 2, fh + 2 * tw, fR + 1, 3), [rc[0] + fx, rc[1], zS1 - 1.5]]), 16);
+    { const fl = 10; add('shroud', merge([roundedBox(fw + 2 * fl, fl, 3, 1, 2), [rc[0], rc[1] + fh / 2 + fl / 2, zS0 - 1.5]], [roundedBox(fw + 2 * fl, fl, 3, 1, 2), [rc[0], rc[1] - fh / 2 - fl / 2, zS0 - 1.5]], [roundedBox(fl, fh, 3, 1, 2), [rc[0] - fw / 2 - fl / 2, rc[1], zS0 - 1.5]], [roundedBox(fl, fh, 3, 1, 2), [rc[0] + fw / 2 + fl / 2, rc[1], zS0 - 1.5]]), 16); }
+    const fz = zS1 - 3 - g.fans.depth / 2, exFan = [0, 0, -260];
+    for (const fx of fxs) {
+      const c = [rc[0] + fx, rc[1], fz], hw = fR + 4;
+      add('fan', merge([xf(lathe([[fR - 1, -16], [fR + 1.5, -16], [fR + 1.5, 16], [fR - 1, 16], [fR - 1, -16]], 96), toZ), c]), 6, { ex: exFan });
+      { const fr = new GB(); for (const [ax, ay] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { fr.add(roundedBox(14, 14, 32, 3, 2), [c[0] + ax * (hw - 6), c[1] + ay * (hw - 6), c[2]]); } fr.add(roundedBox(2 * hw, 4, 32, 1, 1), [c[0], c[1] + hw - 2, c[2]]); fr.add(roundedBox(2 * hw, 4, 32, 1, 1), [c[0], c[1] - hw + 2, c[2]]); add('fan', fr.done(), 6); }
+      { const bl = new GB(); for (const [ax, ay] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) bl.add(xf(cylinder(2.2, 40, 10), toZ), [c[0] + ax * (hw - 6), c[1] + ay * (hw - 6), c[2] + 3]); add('fan', bl.done(), 8); }
+      add('fan', merge([xf(lathe([[0, -14], [17, -14], [19, -11], [19, 10], [0, 10]], 48), toZ), [c[0], c[1], c[2] - 2]]), 6);
+      add('fan', merge([xf(cylinder(11, 0.8, 32), toZ), [c[0], c[1], c[2] - 16.5]]), 21);
+      { const st = new GB(); for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.6; st.add(sweep(linePts([Math.cos(a) * 18, Math.sin(a) * 18, 0], [Math.cos(a) * (fR - 1), Math.sin(a) * (fR - 1), 0], 2), 1.6, 8), [c[0], c[1], c[2] - 14]); } add('fan', st.done(), 6); }
+      add('fan', bladeMesh(fR - 3, 19, 7), 6, { spin: [c[0], c[1], c[2] + 4] });
+      cable('fan', [[c[0] + 10, c[1] - 20, c[2] - 15], [c[0] + 30, c[1] - 50, c[2] - 20], [c[0] + 60, F.yb + 24, F.zr - 30], [c[0] + 80, F.yb + 24, F.zr + 40]], 1.6, 4);
+    }
+    // ================= catch bottle: rear right corner, low, inside the frame =================
+    const exC = [100, 0, -60], body = [[0, -cH / 2], [cR - 4, -cH / 2], [cR, -cH / 2 + 4]];
+    for (let k = 0; k < 6; k++) { const y = -cH / 2 + 14 + k * 3.2; body.push([cR, y], [cR - 1.2, y + 1.2], [cR, y + 2.4]); }
+    body.push([cR, cH / 2 - 10], [cR - 1, cH / 2 - 6], [cR - 3, cH / 2 - 6]);
     add('can', merge([lathe(body, 72), cc]), 0, { ex: exC });
     add('can', merge([lathe([[cR - 3, cH / 2 - 6], [cR + 1, cH / 2 - 6], [cR + 1, cH / 2 + 10], [cR - 3, cH / 2 + 12], [0, cH / 2 + 12]], 72), cc]), 5);
-    this.canIn = [cc[0] + 16, cc[1] + cH / 2 + 34, cc[2]]; this.canVent = [cc[0] - 16, cc[1] + cH / 2 + 30, cc[2]];
-    add('can', merge([hexNut(8, 8), [this.canIn[0], cc[1] + cH / 2 + 16, cc[2]]], [hexNut(8, 8), [this.canVent[0], cc[1] + cH / 2 + 16, cc[2]]]), 24);
-    add('can', merge([cylinder(3.2, 18, 16), [this.canIn[0], this.canIn[1] - 9, cc[2]]], [cylinder(3.2, 14, 16), [this.canVent[0], this.canVent[1] - 7, cc[2]]]), 8);
-    // sight tube with water level
-    const stx = cc[0] + cR + 8;
-    add('can', merge([cylinder(5, cH - 30, 24), [stx, cc[1], cc[2] + 8]]), 11, { glass: true, alpha: 1 });
-    add('can', merge([cylinder(3.6, (cH - 34) * 0.42, 20), [stx, cc[1] - (cH - 34) * 0.29, cc[2] + 8]]), 26, { glass: true, alpha: 0.85 });
-    add('can', merge([roundedBox(14, 10, 12, 2, 2), [stx - 4, cc[1] + cH / 2 - 18, cc[2] + 8]], [roundedBox(14, 10, 12, 2, 2), [stx - 4, cc[1] - cH / 2 + 18, cc[2] + 8]]), 0);
-    add('can', ring([cc[0], cc[1], cc[2]], cR + 1.6, 1.8, 'xz'), 8);
-    add('mounts', merge([roundedBox(25.4, 22, Math.abs(F.zb - cc[2]) - cR, 1.5, 2), [cc[0], cc[1], (F.zb + cc[2] - cR) / 2]]), 12);
-    const ov = catmull([this.overflowNip, [this.overflowNip[0] + 20, this.overflowNip[1] + 12, -20], [cc[0] + 40, this.canIn[1] + 46, cc[2]], this.canIn], 4);
+    this.canIn = [cc[0] - 16, cc[1] + cH / 2 + 34, cc[2]];
+    this.canVent = [cc[0] + 16, cc[1] + cH / 2 + 30, cc[2] - 10];
+    add('can', merge([hexNut(8, 8), [this.canIn[0], cc[1] + cH / 2 + 16, this.canIn[2]]], [hexNut(8, 8), [this.canVent[0], cc[1] + cH / 2 + 16, this.canVent[2]]]), 24);
+    add('can', merge([cylinder(3.2, 18, 16), [this.canIn[0], this.canIn[1] - 9, this.canIn[2]]], [cylinder(3.2, 14, 16), [this.canVent[0], this.canVent[1] - 7, this.canVent[2]]]), 8);
+    const stx = [cc[0] - cR - 8, cc[1], cc[2] + 14];
+    add('can', merge([cylinder(5, cH - 30, 24), stx]), 11, { glass: true, alpha: 1 });
+    add('can', merge([cylinder(3.6, (cH - 34) * 0.42, 20), [stx[0], cc[1] - (cH - 34) * 0.29, stx[2]]]), 26, { glass: true, alpha: 0.85 });
+    add('can', merge([roundedBox(14, 10, 12, 2, 2), [stx[0] + 4, cc[1] + cH / 2 - 18, stx[2]]], [roundedBox(14, 10, 12, 2, 2), [stx[0] + 4, cc[1] - cH / 2 + 18, stx[2]]]), 0);
+    const clampYc = cc[1] - cH / 2 + 26;
+    add('can', ring([cc[0], clampYc, cc[2]], cR + 1.6, 1.8, 'xz'), 8);
+    const hcCan = tab('t2', [F.xb - 12.7, F.yb + 6, cc[2]], [0, 1, 0], [-1, 0, 0]);
+    add('can', merge([roundedBox(Math.abs(hcCan[0] - (cc[0] + cR)) + 6, 10, 10, 2, 2), [(hcCan[0] + cc[0] + cR) / 2, Math.min(hcCan[1], clampYc), cc[2]]]), 8);
+    // bleed / overflow line: cap-neck nipple at the front-left high point, back to the bottle in the rear-right corner
+    const ov = route([this.overflowNip, along2(this.overflowNip, toCan, 14), along2(this.overflowNip, toCan, 40), [-60, 620, -150], [150, 560, -330], [190, 420, -560], [this.canIn[0], this.canIn[1] + 60, this.canIn[2]], [this.canIn[0], this.canIn[1] + 20, this.canIn[2]], this.canIn], 4);
     add('lines', sweep(ov, 4.3, 16), 11, { glass: true });
     add('lines', sweep(ov, 2.6, 10), 26, { glass: true, alpha: 0.5 });
-    const vent = catmull([this.canVent, [this.canVent[0] - 10, this.canVent[1] + 30, cc[2]], [cc[0] - cR - 30, cc[1], cc[2] - 20], [cc[0] - cR - 40, F.y0 + 20, cc[2] - 30]], 6);
+    this.overflowLen = pathLen(ov);
+    // short drain/vent off the bottle, down its outside to the chassis bottom
+    const vent = route([this.canVent, [this.canVent[0], this.canVent[1] + 12, this.canVent[2]], [this.canVent[0] + 20, this.canVent[1] + 14, this.canVent[2] - 8], [cc[0] + cR + 8, this.canVent[1] - 20, cc[2] - 12], [cc[0] + cR + 8, F.yb + 8, cc[2] - 12]], 3);
+    this.drainLen = pathLen(vent);
     add('lines', sweep(vent, 3.2, 12), 11, { glass: true });
+    // firewall (driver side of the bay): every cooling part stays behind it
+    add('firewall', merge([roundedBox(2 * F.xb + 20, F.yt - F.yb + 20, 2, 2, 2), [0, (F.yt + F.yb) / 2, F.zf + 14]]), 0);
     // ================= hoses, nylon clamps, sensors =================
-    this.hoseGeo = {};
+    this.hoseGeo = {}; this.sensorPts = {};
     for (const r of runs) {
       const d = hoseDims[r.line], ri = d.ID / 2, ro = d.OD / 2;
-      add(r.id, sweep(r.path, ri * 0.97, 28), 10, { coolant: true, glass: true, alpha: 0.78, len: r.L, hose: r.id, cut: true });
-      add(r.id, sweep(r.path, ro, 32), 11, { glass: true, alpha: 1, cut: true });
+      add(r.id, sweep(r.path, ri * 0.97, 28), 10, { coolant: true, glass: true, alpha: 0.78, len: r.L, hose: r.id });
+      add(r.id, sweep(r.path, ro, 32), 11, { glass: true, alpha: 1 });
       const cl = new GB();
       for (const k of [0.012, 0.988]) {
-        const s = this.pathAt(r.path, k), dd = this.pathDir(r.path, k), u = nrm(cross(dd, Math.abs(dd[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), w = cross(dd, u), rp = [];
+        const kk = r.L < 60 ? (k < 0.5 ? 0.2 : 0.8) : k, s = this.pathAt(r.path, kk), dd = this.pathDir(r.path, kk), u = nrm(cross(dd, Math.abs(dd[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), w = cross(dd, u), rp = [];
         for (let a = 0; a <= 48; a++) { const t = a / 48 * Math.PI * 2; rp.push([s[0] + (u[0] * Math.cos(t) + w[0] * Math.sin(t)) * (ro + 1.2), s[1] + (u[1] * Math.cos(t) + w[1] * Math.sin(t)) * (ro + 1.2), s[2] + (u[2] * Math.cos(t) + w[2] * Math.sin(t)) * (ro + 1.2)]); }
         cl.add(sweep(rp, 1.6, 6, true), [0, 0, 0]);
         cl.add(roundedBox(6, 6, 6, 1.5, 1), [s[0] + u[0] * (ro + 4), s[1] + u[1] * (ro + 4), s[2] + u[2] * (ro + 4)]);
       }
       add(r.id, cl.done(), 6);
-      if (r.sensor) {
-        const k = 0.5, s = this.pathAt(r.path, k), dd = this.pathDir(r.path, k), up = nrm(cross(dd, [0, 0, 1])), flow = r.sensor === 'flow';
-        add(r.id, merge([along(cylinder(ro + 3.5, flow ? 48 : 26, 36), dd), s]), flow ? 6 : 0);
+      this.sensorPts = this.sensorPts || {};
+      for (const sn of r.sensors || []) {
+        const s = this.pathAt(r.path, sn.at), dd = this.pathDir(r.path, sn.at), up = nrm(cross(dd, Math.abs(dd[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), flow = sn.type === 'flow';
+        add(r.id, merge([along(cylinder(ro + 3.5, flow ? 52 : 24, 36), dd), s]), flow ? 6 : 0);
         if (!flow) add(r.id, merge([along(hexNut(ro + 4.5, 8), dd), s]), 0);
-        const tip = [s[0] + up[0] * (ro + 14), s[1] + up[1] * (ro + 14), s[2] + up[2] * (ro + 14)];
-        add(r.id, merge([along(flow ? roundedBox(18, 16, 22, 3, 2) : hexNut(6.5, 12), up), [s[0] + up[0] * (ro + 7), s[1] + up[1] * (ro + 7), s[2] + up[2] * (ro + 7)]]), flow ? 6 : 8);
+        else add(r.id, merge([along(hexNut(ro + 4.5, 7), dd), along2(s, dd, 27)], [along(hexNut(ro + 4.5, 7), dd), along2(s, dd, -27)]), 8);
+        const tip = along2(s, up, ro + 14);
+        add(r.id, merge([along(flow ? roundedBox(20, 18, 26, 3, 2) : hexNut(6.5, 12), up), along2(s, up, ro + 7)]), flow ? 23 : 8);
         add(r.id, merge([along(cylinder(5, 12, 16), up), tip]), 27);
-        wire(r.id, [[tip[0] + up[0] * 6, tip[1] + up[1] * 6, tip[2] + up[2] * 6], [tip[0] + up[0] * 30, tip[1] + up[1] * 30 + 10, tip[2] - 30], [tip[0] * 0.9, tip[1] + 20, F.zb + 16]], 1.5, 4);
+        cable(r.id, [along2(tip, up, 6), along2(tip, up, 22), along2(along2(tip, up, 40), dd, 30), along2(along2(tip, up, 46), dd, 90)], 1.5, 4);
+        this.sensorPts[sn.name] = along2(s, up, ro + 24);
       }
       this.hoseGeo[r.id] = { path: r.path, cum: this.cumLen(r.path), L: r.L, ri };
     }
-    // ================= frame: 1" tube members near each mount, faded at the ends =================
-    const member = (y, xa, xb, z = F.zb) => { const p = linePts([xa, y, z], [xb, y, z], 2); add('frame', sweep(p, 12.7, 24), 12, { fade: true, len: Math.abs(xb - xa) }); };
-    member(B + 38, -260, 220); member(pc[1] - 30, -200, 220); member(ic[1] - iH / 2 + 4, ic[0] - iL / 2 - 80, ic[0] + iL / 2 + 120); member(mc[1], mc[0] - 220, mc[0] + 60);
-    member(mc[1] + 90, mc[0] - 200, mc[0] + 80); member(mc[1] - 90, mc[0] - 200, mc[0] + 80); member(cc[1], cc[0] - 140, cc[0] + 120); member(rc[1] - R.H / 2 - 16, rc[0] - 260, rc[0] + 260);
-    const post = (x, ya, yb, z = F.zb) => add('frame', sweep(linePts([x, ya, z], [x, yb, z], 2), 12.7, 24), 12, { fade: true, len: Math.abs(yb - ya) });
-    post(-500, -40, 1250); post(560, -40, 1250);
+    // ================= frame (1 in OD tube rear bay, approximate from the screenshots) =================
+    { const fr = new GB(); for (const [a, b] of g.frameTubes) fr.add(sweep(linePts(a, b, 2), 12.7, 24), [0, 0, 0]); add('frame', fr.done(), 12); }
     // floor
     const fl = new GB(); const S = 5000; { const a = fl.v([-S, 0, -S], [0, 1, 0]), b = fl.v([S, 0, -S], [0, 1, 0]), c = fl.v([S, 0, S], [0, 1, 0]), d = fl.v([-S, 0, S], [0, 1, 0]); fl.q(a, b, c, d); }
-    this.floor = this.up(fl.done()); this.floorY = F.y0 - 14;
-    this.home = { c: [40, 600, 0], r: 760 }; if (!this.bounds) this.bounds = { c: [...this.home.c], r: this.home.r }; this.goal = this.goal || { c: [...this.home.c], r: this.home.r };
-    this.focusSets = { loop: this.home, pot: { c: [0, GEO.pot.base + 10, 0], r: 165 }, pump: { c: [0, 690, 0], r: 200 }, branches: { c: [-10, 470, 0], r: 430 }, radiator: { c: [0, 75, -30], r: 240 } };
+    this.floor = this.up(fl.done()); this.floorY = -40;
+    this.home = { c: [0, 320, -440], r: 640 }; if (!this.bounds) this.bounds = { c: [...this.home.c], r: this.home.r }; this.goal = this.goal || { c: [...this.home.c], r: this.home.r };
+    this.focusSets = { loop: this.home, pot: { c: [sp.c[0], B + 20, sp.c[2]], r: 170 }, pump: { c: [pc[0], pc[1] + 20, pc[2] - 40], r: 230 }, branches: { c: [-40, 300, -420], r: 360 }, radiator: { c: [0, 170, -860], r: 250 } };
     this.ensureParticles(true);
   }
   cumLen(path) { const c = [0]; for (let i = 1; i < path.length; i++) c.push(c[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2])); return c; }
@@ -542,13 +580,13 @@ class LoopRenderer {
       }
     }
     if (this.cut && this.flow && !ex) {
-      const sp = GEO.pot, B = sp.base, Tp = this.st.potT || 40;
+      const sp = GEO.pot, B = sp.base, Tp = this.st.potT || 40, pn = nrm([this.eye[0] - sp.c[0], 0, this.eye[2] - sp.c[2]]), pv = [-pn[2], 0, pn[0]];
       for (const p of this.swirl) {
         let prev = null;
         for (let k = 0; k < 5; k++) {
           const a = p.a - k * 0.12, yy = p.y - k * 0.008, y = B + sp.inletY - yy * (sp.inletY + sp.cone * 0.9);
           const rad = y > B ? sp.ri * p.r : (sp.outRi + (sp.ri - sp.outRi) * Math.max(0, (y - (B - sp.cone)) / sp.cone)) * p.r;
-          const q = [Math.cos(a) * rad, y, -Math.abs(Math.sin(a)) * rad - 0.5];
+          const q = [GEO.pot.c[0] + (Math.cos(a) * pv[0] - Math.abs(Math.sin(a)) * pn[0]) * rad, y, GEO.pot.c[2] + (Math.cos(a) * pv[2] - Math.abs(Math.sin(a)) * pn[2]) * rad];
           if (prev) push(prev, q, Tp, Tp, 1 - (k - 1) / 5, 1 - k / 5); prev = q;
         }
       }
@@ -556,7 +594,7 @@ class LoopRenderer {
       if (R) for (const p of this.radPt) {
         const y = this.tubeY[p.t], x0 = rc[0] - this.rad.W / 2 + p.x * this.rad.W, x1 = x0 - 14; if (x1 < rc[0] - this.rad.W / 2) continue;
         const ix = Math.min(R.nx - 1, Math.floor(p.x * R.nx)), T = R.mapC[Math.min(R.N - 1, p.t)][ix];
-        push([x1, y, -Math.abs(p.z) * this.rad.D * 0.4], [x0, y, -Math.abs(p.z) * this.rad.D * 0.4], T, T, 0.1, 0.9);
+        { const sgn = this.eye[2] > rc[2] ? -1 : 1; push([x1, y, rc[2] + sgn * Math.abs(p.z) * this.rad.D * 0.4], [x0, y, rc[2] + sgn * Math.abs(p.z) * this.rad.D * 0.4], T, T, 0.1, 0.9); }
       }
     }
     return new Float32Array(out);
@@ -578,6 +616,11 @@ class LoopRenderer {
     const gl = this.gl, u = prog.u;
     gl.uniformMatrix4fv(u.uModel, false, this.modelOf(it));
     if (u.uCutOn) gl.uniform1i(u.uCutOn, this.cut && it.cut ? 1 : 0);
+    if (u.uCutZ && it.cut) {
+      const o = this.offsetOf(it.part), c = it.cutC || [0, 0, it.cutZ], cx = c[0] + o[0], cz = c[2] + o[2];
+      let nx = this.eye[0] - cx, nz = this.eye[2] - cz; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      gl.uniform3f(u.uCutN, nx, 0, nz); gl.uniform1f(u.uCutZ, nx * cx + nz * cz);
+    }
     this.bindMesh(it.mesh);
     if (it.inst) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
@@ -599,9 +642,10 @@ class LoopRenderer {
     const dist = fit * 0.95 * this.zoom * (1 + 0.3 * this.explode);
     const cy = Math.cos(this.pitch);
     const right = [Math.cos(this.yaw), 0, -Math.sin(this.yaw)];
-    const tgt = [b.c[0] + right[0] * this.pan[0], b.c[1] + this.pan[1], b.c[2] + right[2] * this.pan[0]];
-    const eye = [tgt[0] + Math.sin(this.yaw) * cy * dist, tgt[1] + Math.sin(this.pitch) * dist, tgt[2] + Math.cos(this.yaw) * cy * dist];
-    const V = M4.look(eye, tgt, [0, 1, 0]), Pm = M4.persp(fov, aspect, Math.max(4, dist * 0.04), dist * 6 + 3000);
+    // Display space is the world mirrored in x, so that seen from behind the car the swirl pot is on the left and the catch bottle on the right.
+    const tgt = [-b.c[0] + right[0] * this.pan[0], b.c[1] + this.pan[1], b.c[2] + right[2] * this.pan[0]];
+    const eyeD = [tgt[0] + Math.sin(this.yaw) * cy * dist, tgt[1] + Math.sin(this.pitch) * dist, tgt[2] + Math.cos(this.yaw) * cy * dist];
+    const V = M4.mul(M4.look(eyeD, tgt, [0, 1, 0]), [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), eye = [-eyeD[0], eyeD[1], eyeD[2]], Pm = M4.persp(fov, aspect, Math.max(4, dist * 0.04), dist * 6 + 3000);
     Object.assign(this, { VP: M4.mul(Pm, V), V, Pm, eye, Wc, Hc, dpr });
   }
   tex(w, h, ifmt, fmt, type, filt) { const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }
@@ -749,13 +793,13 @@ class LoopRenderer {
   placeLabels() {
     if (!this.labelsEl) return;
     const P = ports(), add = (p, part) => { const o = this.offsetOf(part); return [p[0] + o[0], p[1] + o[1], p[2] + o[2]]; };
-    const pts = { lpot: add([0, GEO.pot.top + 70, 0], 'pot'), lmin: add(P.motorIn, 'motor'), linv: add(P.invOut, 'inv'), lrin: add(GEO.radInEnd, 'radiator'), lrout: add(GEO.radOutEnd, 'radiator'), lfan: add([GEO.fan.c[0] + GEO.fan.D * 0.42, GEO.fan.c[1] - GEO.fan.D * 0.42, GEO.fan.c[2] - 20], 'fan') };
+    const pts = { lpot: add([GEO.pot.c[0], GEO.pot.top + 70, GEO.pot.c[2]], 'pot'), lmin: add(P.motorIn, 'motor'), linv: add(P.invOut, 'inv'), lrin: add(GEO.radInEnd, 'radiator'), lrout: add(GEO.radOutEnd, 'radiator'), lfan: add([GEO.fan.c[0] + GEO.fan.D * 0.42, GEO.fan.c[1] - GEO.fan.D * 0.42, GEO.fan.c[2] - 20], 'fan') };
     const placed = [];
     for (const id in pts) {
       const el = this.labelsEl.querySelector('[data-k=' + id + ']'); if (!el) continue;
       const [x, y, w] = this.project(pts[id]);
-      if ((id === 'lfan' && this.eye[2] > GEO.fan.c[2] + 60) || ((id === 'lmin' || id === 'linv') && this.eye[2] < -300)) { el.style.opacity = 0; continue; }
-      let vis = w > 0 && x > 50 && x < this.Wc / this.dpr - 50 && y > 60 && y < this.Hc / this.dpr - 10 && getComputedStyle(el).display !== 'none';
+      if (id === 'lfan' && this.eye[2] > GEO.fan.c[2] + 60 && this.eye[2] > -200) { el.style.opacity = 0; continue; }
+      let vis = w > 0 && x > 70 && x < this.Wc / this.dpr - 70 && y > 120 && y < this.Hc / this.dpr - 10 && getComputedStyle(el).display !== 'none';
       for (const q of placed) if (Math.abs(q[0] - x) < 130 && Math.abs(q[1] - y) < 44) vis = false;
       if (vis) placed.push([x, y]);
       el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`; el.style.opacity = vis ? 1 : 0;
